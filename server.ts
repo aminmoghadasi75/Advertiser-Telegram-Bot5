@@ -6315,132 +6315,133 @@ async function runAnonymousChatWorker() {
   console.log('🛑 Telegram Anonymous Chat Bot Automation Worker stopped.');
 }
 
-// Helper: Build Clean JSON Export Data (Instructions + pure conversation messages)
-async function generateAnonymousChatJsonExport(
+// Helper: Format Analytical Conversation Log for Export (TXT / MD)
+function generateAnonymousChatTextReport(
   sessions: AnonymousChatSession[],
-  automator: AnonymousChatAutomatorConfig | undefined
-) {
-  const instructions = automator?.instructions || defaultAnonymousAutomatorConfig.instructions;
-
-  // Filter conversations and their messages (only stranger & bot messages)
-  const cleanConversations: any[] = [];
-
-  for (let idx = 0; idx < sessions.length; idx++) {
-    const s = sessions[idx];
-    const rawTranscript = s.transcript || [];
-    const validMessages = rawTranscript
-      .filter((m) => {
-        if (!m || !m.text) return false;
-        const txt = String(m.text).trim();
-        if (!txt) return false;
-        // Ignore internal logs & bot system notifications
-        if (
-          m.sender === 'bot_system' ||
-          txt.startsWith('📋 پیام سیستم ربات') ||
-          txt.startsWith('🛑') ||
-          txt.startsWith('🟢') ||
-          txt.startsWith('🔄') ||
-          txt.startsWith('ارسال دستور شروع') ||
-          txt.startsWith('کلیک بر روی دکمه')
-        ) {
-          return false;
-        }
-        return true;
-      })
-      .map((m) => ({
-        sender: (m.sender === 'stranger' ? 'stranger' : 'bot') as 'stranger' | 'bot',
-        text: String(m.text || '').trim(),
-        timestamp: m.timestamp || new Date().toISOString(),
-      }))
-      .filter((m) => m.text.length > 0);
-
-    if (validMessages.length > 0) {
-      cleanConversations.push({
-        conversationIndex: s.sessionIndex || (sessions.length - idx),
-        startedAt: s.startedAt || new Date().toISOString(),
-        endedAt: s.endedAt || new Date().toISOString(),
-        messages: validMessages,
-      });
-    }
+  automator: AnonymousChatAutomatorConfig | undefined,
+  options: { runOnly?: boolean; currentRunStartedAt?: string } = {}
+): string {
+  let filteredSessions = sessions;
+  if (options.runOnly && options.currentRunStartedAt) {
+    const runStartTs = new Date(options.currentRunStartedAt).getTime();
+    filteredSessions = sessions.filter((s) => {
+      const startTs = new Date(s.startedAt).getTime();
+      return startTs >= runStartTs - 30000;
+    });
   }
 
-  // If no conversations found in state memory, attempt to reconstruct from real Telegram messages
-  if (cleanConversations.length === 0) {
-    try {
-      const client = await getOrInitTgClient();
-      const selectedBot = automator?.bots.find((b) => b.id === automator.selectedBotId) || automator?.bots[0];
-      if (client && selectedBot) {
-        const botUsernameClean = selectedBot.botUsername.replace('@', '').replace('t.me/', '').trim();
-        const botEntity = await client.getEntity(botUsernameClean);
-        const tgMsgs = await client.getMessages(botEntity, { limit: 100 });
+  // If no sessions in current run filter, fall back to all sessions
+  if (filteredSessions.length === 0 && sessions.length > 0) {
+    filteredSessions = sessions;
+  }
 
-        if (tgMsgs && tgMsgs.length > 0) {
-          const reconstructedMsgs: Array<{ sender: 'stranger' | 'bot'; text: string; timestamp: string }> = [];
+  const bot = automator?.bots.find((b) => b.id === automator.selectedBotId) || automator?.bots[0];
+  const instructions = automator?.instructions;
+  const nowStr = new Date().toLocaleString('fa-IR');
+  const nowIso = new Date().toISOString();
 
-          // Sort messages in chronological order (oldest to newest)
-          const chronological = [...tgMsgs].reverse();
+  let totalStrangerMsgs = 0;
+  let totalAiMsgs = 0;
+  filteredSessions.forEach((s) => {
+    totalStrangerMsgs += s.strangerMessagesCount || 0;
+    totalAiMsgs += s.aiMessagesCount || 0;
+  });
 
-          for (const m of chronological) {
-            const txt = (m.message || '').trim();
-            if (!txt) continue;
+  const lines: string[] = [
+    '================================================================================',
+    '📊 گزارش تحلیلی جامع مکالمات چت ناشناس تلگرام (Anonymous Chat Analysis Report)',
+    '================================================================================',
+    `📅 زمان تولید گزارش: ${nowStr} (${nowIso})`,
+    `🤖 ربات هدف: ${bot?.name || 'ربات ناشناس'} (@${bot?.botUsername?.replace('@', '') || ''})`,
+    `📱 شماره حساب تلگرام: ${appState.credentials.phoneNumber || 'ثبت نشده'} (${appState.credentials.userProfile?.firstName || 'UserBot'})`,
+    `👥 تعداد کل مکالمات ثبت‌شده در این گزارش: ${filteredSessions.length} مکالمه`,
+    `📥 مجموع پیام‌های دریافتی از کاربران ناشناس: ${totalStrangerMsgs} پیام`,
+    `📤 مجموع پاسخ‌های ارسالی هوش مصنوعی (Gemini): ${totalAiMsgs} پیام`,
+    `📈 میانگین تبادل پیام در هر مکالمه: ${filteredSessions.length > 0 ? ((totalStrangerMsgs + totalAiMsgs) / filteredSessions.length).toFixed(1) : '0'} پیام`,
+    '',
+    '--------------------------------------------------------------------------------',
+    '⚙️ دستورالعمل و پرامپت فعال هوش مصنوعی (Active AI System Prompt & Instructions)',
+    '--------------------------------------------------------------------------------',
+    `[متن دستورالعمل و هویت هوش مصنوعی]:`,
+    instructions?.systemPrompt || '(دستورالعمل پیش‌فرض)',
+    '',
+    `• سقف پیام در هر چت: ${instructions?.maxMessagesPerChat || 4} پیام`,
+    `• عمق پنجره حافظه مکالمه جاری: ${instructions?.memoryWindowSize || 10} پیام`,
+    `• پیام سلام/شروع خودکار: ${instructions?.initiateGreetingOnConnect ? `فعال («${instructions?.initialGreetingText || 'سلام خوبی؟'}»)` : 'غیرفعال'}`,
+    `• پیام خداحافظی قبل از خروج: ${instructions?.enablePreExitFarewell ? `فعال («${instructions?.preExitFarewellText || ''}»)` : 'غیرفعال'}`,
+    `• محصول/کمپین تبلیغاتی: ${instructions?.productPromotion?.enabled ? `فعال (محصول: ${instructions?.productPromotion?.productName || 'نامشخص'} - آیدی: ${instructions?.productPromotion?.contactHandleOrLink || 'ندارد'})` : 'غیرفعال'}`,
+    '',
+    '================================================================================',
+    '📋 مشروح متن مکالمات ثبت‌شده به ترتیب زمان (Full Conversation Transcripts)',
+    '================================================================================',
+    '',
+  ];
 
-            if (m.out) {
-              // Outgoing message sent by user/bot
-              const isCmd =
-                txt.startsWith('/') ||
-                (selectedBot.entrySteps || []).some((step) => step.label && txt === step.label.trim()) ||
-                (selectedBot.exitSteps || []).some((step) => step.label && txt === step.label.trim());
+  if (filteredSessions.length === 0) {
+    lines.push('⚠️ هنوز هیچ مکالمه‌ای در این نشست ثبت نشده است.');
+  } else {
+    filteredSessions.forEach((s, idx) => {
+      const sessionNum = s.sessionIndex || (filteredSessions.length - idx);
+      const startFa = s.startedAt ? new Date(s.startedAt).toLocaleTimeString('fa-IR') : 'نامشخص';
+      const endFa = s.endedAt ? new Date(s.endedAt).toLocaleTimeString('fa-IR') : 'در حال انجام';
 
-              if (!isCmd) {
-                reconstructedMsgs.push({
-                  sender: 'bot',
-                  text: txt,
-                  timestamp: new Date((m.date || Date.now() / 1000) * 1000).toISOString(),
-                });
-              }
-            } else {
-              // Incoming message from bot or stranger
-              const isSys = isSystemOrBotMessage(txt, m.replyMarkup, selectedBot);
-              if (!isSys) {
-                reconstructedMsgs.push({
-                  sender: 'stranger',
-                  text: txt,
-                  timestamp: new Date((m.date || Date.now() / 1000) * 1000).toISOString(),
-                });
-              }
-            }
-          }
-
-          if (reconstructedMsgs.length > 0) {
-            cleanConversations.push({
-              conversationIndex: 1,
-              startedAt: reconstructedMsgs[0]?.timestamp || new Date().toISOString(),
-              endedAt: reconstructedMsgs[reconstructedMsgs.length - 1]?.timestamp || new Date().toISOString(),
-              messages: reconstructedMsgs,
-            });
-          }
-        }
+      let exitReasonLabel = 'در حال گفتگو یا خروج عادی';
+      switch (s.exitReason) {
+        case 'max_messages_reached':
+          exitReasonLabel = 'اتمام سقف پیام‌های مجاز (خروج طبق سناریو)';
+          break;
+        case 'stranger_silence':
+          exitReasonLabel = 'سکوت و عدم پاسخ مخاطب (Timeout)';
+          break;
+        case 'stranger_disconnected':
+          exitReasonLabel = 'قطع اتصال توسط کاربر ناشناس';
+          break;
+        case 'inappropriate_content':
+          exitReasonLabel = 'شناسایی کلیدواژه نامناسب';
+          break;
+        case 'manual_operator_skip':
+          exitReasonLabel = 'رد کردن دستی توسط اپراتور';
+          break;
       }
-    } catch (tgErr) {
-      console.warn('[چت ناشناس] بازیابی مستقیم از تلگرام با اخطار مواجه شد:', tgErr);
-    }
+
+      lines.push(`────────────────────────────────────────────────────────────────────────────────`);
+      lines.push(`💬 [مکالمه شماره #${sessionNum}] (شناسه: ${s.id})`);
+      lines.push(`• شروع: ${startFa}  |  پایان: ${endFa}  |  وضعیت/علت خاتمه: ${exitReasonLabel}`);
+      if (s.partnerProfileSnippet) {
+        lines.push(`• مشخصات استخراج‌شده هم‌صحبت: ${s.partnerProfileSnippet}`);
+      }
+      if (s.partnerTag) {
+        lines.push(`• شناسه/تگ مخاطب: ${s.partnerTag}`);
+      }
+      lines.push(`• آمار پیام‌ها: ${s.aiMessagesCount || 0} پیام بات/هوش مصنوعی | ${s.strangerMessagesCount || 0} پیام کاربر ناشناس`);
+      lines.push(`----------------- ریز دیالوگ‌ها و پیام‌ها -----------------`);
+
+      if (!s.transcript || s.transcript.length === 0) {
+        lines.push('  (پیامی رد و بدل نشد)');
+      } else {
+        s.transcript.forEach((m) => {
+          const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('fa-IR') : '';
+          let senderLabel = '[کاربر ناشناس]';
+          if (m.sender === 'me_melody') {
+            senderLabel = '[بات (هوش مصنوعی Gemini)]';
+          } else if (m.sender === 'operator_manual') {
+            senderLabel = '[اپراتور دستی]';
+          } else if (m.sender === 'bot_system') {
+            senderLabel = '[پیام سیستمی ربات]';
+          }
+
+          lines.push(`[${time}] ${senderLabel}: ${m.text}`);
+        });
+      }
+      lines.push('');
+    });
   }
 
-  return {
-    exportedAt: new Date().toISOString(),
-    instructions: {
-      systemPrompt: instructions.systemPrompt,
-      maxMessagesPerChat: instructions.maxMessagesPerChat,
-      memoryWindowSize: instructions.memoryWindowSize,
-      initiateGreetingOnConnect: instructions.initiateGreetingOnConnect,
-      initialGreetingText: instructions.initialGreetingText,
-      enablePreExitFarewell: instructions.enablePreExitFarewell,
-      preExitFarewellText: instructions.preExitFarewellText,
-      inappropriateKeywords: instructions.inappropriateKeywords || [],
-      productPromotion: instructions.productPromotion,
-    },
-    conversations: cleanConversations,
-  };
+  lines.push('================================================================================');
+  lines.push('🏁 پایان گزارش تحلیلی چت ناشناس.');
+  lines.push('================================================================================');
+
+  return lines.join('\n');
 }
 
 // ============================================================================
@@ -6455,46 +6456,59 @@ app.get('/api/anonymous/state', (req, res) => {
   });
 });
 
-app.get('/api/anonymous/export-history', async (req, res) => {
+app.get('/api/anonymous/export-history', (req, res) => {
   try {
+    const format = (req.query.format as string) || 'txt';
+    const runOnly = req.query.runOnly === 'true';
     const automator = appState.anonymousAutomator;
     const history = appState.anonymousSessionHistory || [];
 
-    // Also include active sessions if currently in progress or stored in appState
+    // Also include active session if currently in progress
     const allSessions = [...history];
     if (activeAnonChatSession && !allSessions.some((s) => s.id === activeAnonChatSession?.id)) {
       allSessions.unshift({ ...activeAnonChatSession });
     }
-    if (
-      appState.activeAnonymousSession &&
-      !allSessions.some((s) => s.id === appState.activeAnonymousSession?.id)
-    ) {
-      allSessions.unshift({ ...appState.activeAnonymousSession });
-    }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const exportData = await generateAnonymousChatJsonExport(allSessions, automator);
 
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (format === 'json') {
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        bot: automator?.bots.find((b) => b.id === automator.selectedBotId) || automator?.bots[0],
+        automatorConfig: automator,
+        totalSessionsCount: allSessions.length,
+        sessions: allSessions,
+      };
+
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="anonymous_chat_analysis_${timestamp}.json"`
+      );
+      res.send(JSON.stringify(exportData, null, 2));
+      return;
+    }
+
+    // Default: Formatted Text / Markdown Report
+    const textReport = generateAnonymousChatTextReport(allSessions, automator, {
+      runOnly,
+      currentRunStartedAt: automator?.currentRunStartedAt,
+    });
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="chat_conversations_${timestamp}.json"`
+      `attachment; filename="anonymous_chat_analysis_${timestamp}.txt"`
     );
-    res.send(JSON.stringify(exportData, null, 2));
+    res.send(textReport);
   } catch (err: any) {
     console.error('Failed to export anonymous history:', err);
-    res.status(500).json({ error: 'خطا در تولید فایل خروجی JSON مکالمات: ' + (err.message || err) });
+    res.status(500).json({ error: 'خطا در تولید فایل خروجی تاریخچه: ' + (err.message || err) });
   }
 });
 
 app.post('/api/anonymous/clear-history', (req, res) => {
   appState.anonymousSessionHistory = [];
-  if (activeAnonChatSession) {
-    activeAnonChatSession.transcript = [];
-  }
-  if (appState.activeAnonymousSession) {
-    appState.activeAnonymousSession.transcript = [];
-  }
   saveData();
   addLog('info', '[چت ناشناس] تاریخچه تمامی مکالمات ضبط‌شده قبلی پاکسازی گردید.');
   res.json({ success: true, message: 'تاریخچه مکالمات با موفقیت پاکسازی شد.', history: [] });

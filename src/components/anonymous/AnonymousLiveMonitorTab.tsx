@@ -113,15 +113,15 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
     }
   });
 
-  const handleDownloadJson = async () => {
+  const handleDownloadReport = async (format: 'txt' | 'json') => {
     setIsDownloading(true);
     try {
-      const url = `/api/anonymous/export-history`;
+      const url = `/api/anonymous/export-history?format=${format}`;
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute(
         'download',
-        `chat_conversations_${new Date().toISOString().slice(0, 10)}.json`
+        `anonymous_chat_analysis_${new Date().toISOString().slice(0, 10)}.${format}`
       );
       document.body.appendChild(link);
       link.click();
@@ -133,14 +133,34 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
     }
   };
 
+  const handleCopyAllAnalysis = async () => {
+    try {
+      const res = await fetch('/api/anonymous/export-history?format=txt');
+      const text = await res.text();
+      await navigator.clipboard.writeText(text);
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 2500);
+    } catch (err) {
+      console.error('Copy error:', err);
+    }
+  };
+
   const handleCopySingleSession = async (session: AnonymousChatSession) => {
-    const messages = (session.transcript || []).filter(
-      (m) => m.sender === 'stranger' || m.sender === 'me_melody' || m.sender === 'operator_manual'
-    );
-    const lines = messages.map((m) => {
-      const isBot = m.sender === 'me_melody' || m.sender === 'operator_manual';
-      const senderName = isBot ? 'ربات' : 'ناشناس';
-      return `${senderName}: ${m.text.trim()}`;
+    const lines = [
+      `=== مکالمه #${session.sessionIndex || 1} ===`,
+      `زمان: ${session.startedAt ? new Date(session.startedAt).toLocaleTimeString('fa-IR') : ''}`,
+      session.partnerProfileSnippet ? `مشخصات هم‌صحبت: ${session.partnerProfileSnippet}` : '',
+      session.partnerTag ? `تگ کاربر: ${session.partnerTag}` : '',
+      `تعداد پیام‌ها: ${session.aiMessagesCount || 0} پیام بات | ${session.strangerMessagesCount || 0} پیام مخاطب`,
+      '--------------------------------',
+    ].filter(Boolean);
+
+    session.transcript?.forEach((m) => {
+      let label = 'مخاطب';
+      if (m.sender === 'me_melody') label = 'بات (هوش مصنوعی)';
+      if (m.sender === 'operator_manual') label = 'اپراتور دستی';
+      if (m.sender === 'bot_system') label = 'سیستم';
+      lines.push(`[${label}]: ${m.text}`);
     });
 
     try {
@@ -213,10 +233,10 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. DEDICATED CONVERSATION & INSTRUCTIONS JSON EXPORT */}
+      {/* 2. DEDICATED CONVERSATION ANALYSIS & DOWNLOAD TOOLBAR */}
       {/* ========================================================================= */}
       <div className="bg-gradient-to-r from-violet-950/40 via-slate-900 to-indigo-950/40 p-4 rounded-2xl border border-violet-500/30 shadow-lg space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-violet-500/20 text-violet-300 flex items-center justify-center font-bold border border-violet-500/30">
               <Download className="w-4 h-4" />
@@ -224,30 +244,65 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="font-bold text-xs sm:text-sm text-white">
-                  دانلود داده‌های ساختاریافته مکالمات و دستورالعمل‌ها (JSON)
+                  دانلود و تحلیل مکالمات ضبط‌شده (Prompt Performance Analysis)
                 </h4>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
                   {allRecordedSessions.length} مکالمه ثبت‌شده
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                شامل متن دقیق پیام‌های رد و بدل شده (sender, text, timestamp) و کلیه دستورالعمل‌های فعال بات
+                دانلود تمام رفت‌وبرگشت‌ها، دستورالعمل فعال و عملکرد هوش مصنوعی از زمان زدن دکمه شروع تا توقف
               </p>
             </div>
           </div>
 
-          {/* Only 1 Single Download Button */}
-          <div className="flex items-center gap-2">
+          {/* Download Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Download Clean Text Report (.TXT) */}
             <button
-              id="download-anon-json-btn"
+              id="download-anon-analysis-txt-btn"
               type="button"
-              onClick={handleDownloadJson}
-              disabled={isDownloading}
-              className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-md active:scale-95"
-              title="دانلود فایل ساختاریافته JSON شامل دستورالعمل‌ها و پیام‌های مخاطب و ربات"
+              onClick={() => handleDownloadReport('txt')}
+              disabled={isDownloading || allRecordedSessions.length === 0}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow"
+              title="دانلود فایل متنی گزارش تحلیلی شامل پرامپت‌ها و ریز پیام‌ها"
             >
-              <Download className="w-4 h-4" />
-              <span>دانلود فایل JSON مکالمات</span>
+              <FileText className="w-3.5 h-3.5 text-emerald-400" />
+              <span>دانلود گزارش تحلیلی (.TXT)</span>
+            </button>
+
+            {/* Download Raw JSON Data (.JSON) */}
+            <button
+              id="download-anon-analysis-json-btn"
+              type="button"
+              onClick={() => handleDownloadReport('json')}
+              disabled={isDownloading || allRecordedSessions.length === 0}
+              className="px-3.5 py-2 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 disabled:opacity-40 text-sky-300 border border-sky-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow"
+              title="دانلود دیتای ساختاریافته JSON شامل تمامی آبجکت‌ها و تایم‌استمپ‌ها"
+            >
+              <FileCode className="w-3.5 h-3.5 text-sky-400" />
+              <span>داده‌های خام (.JSON)</span>
+            </button>
+
+            {/* Quick Copy to Clipboard for immediate ChatGPT / Gemini evaluation */}
+            <button
+              type="button"
+              onClick={handleCopyAllAnalysis}
+              disabled={allRecordedSessions.length === 0}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all"
+              title="کپی متن کامل گزارش در کلیپ‌بورد جهت الصاق در هوش مصنوعی یا تلگرام"
+            >
+              {copiedAll ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">کپی شد!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 text-slate-400" />
+                  <span>کپی سریع متن آنالیز</span>
+                </>
+              )}
             </button>
           </div>
         </div>

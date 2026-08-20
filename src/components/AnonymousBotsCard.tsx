@@ -75,15 +75,15 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleQuickDownload = async () => {
+  const handleQuickDownload = async (format: 'txt' | 'json') => {
     setIsDownloading(true);
     try {
-      const url = `/api/anonymous/export-history`;
+      const url = `/api/anonymous/export-history?format=${format}`;
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute(
         'download',
-        `chat_conversations_${new Date().toISOString().slice(0, 10)}.json`
+        `anonymous_chat_analysis_${new Date().toISOString().slice(0, 10)}.${format}`
       );
       document.body.appendChild(link);
       link.click();
@@ -290,25 +290,37 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
               {history.length || config?.stats?.totalChatsInitiated || 0} <span className="text-[10px] text-slate-400 font-normal">جلسه</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleQuickDownload}
-            disabled={isDownloading}
-            className="mt-1.5 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95"
-            title="دانلود فایل JSON شامل ساختار دستورالعمل‌ها و مکالمات"
-          >
-            <Download className="w-3 h-3" />
-            <span>دانلود JSON مکالمات</span>
-          </button>
+          {history.length > 0 && (
+            <button
+              type="button"
+              onClick={() => handleQuickDownload('txt')}
+              disabled={isDownloading}
+              className="mt-1.5 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+            >
+              <Download className="w-3 h-3" />
+              <span>دانلود آنالیز (.TXT)</span>
+            </button>
+          )}
         </div>
 
-        <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-center">
+        <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-between">
           <div>
             <div className="text-[11px] text-slate-400">پاسخ‌های دریافتی از ناشناس</div>
             <div className="text-sm font-bold text-violet-400 mt-0.5">
               {config?.stats?.totalRepliesFromStrangers || 0} <span className="text-[10px] text-slate-400 font-normal">پیام</span>
             </div>
           </div>
+          {history.length > 0 && (
+            <button
+              type="button"
+              onClick={() => handleQuickDownload('json')}
+              disabled={isDownloading}
+              className="mt-1.5 py-1 px-2 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+            >
+              <Download className="w-3 h-3" />
+              <span>داده‌های ساختاریافته (.JSON)</span>
+            </button>
+          )}
         </div>
       </div>
 
