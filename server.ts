@@ -6316,7 +6316,7 @@ async function runAnonymousChatWorker() {
 }
 
 // Helper: Build Clean JSON Export Data (Instructions + pure conversation messages)
-function generateAnonymousChatJsonExport(
+async function generateAnonymousChatJsonExport(
   sessions: AnonymousChatSession[],
   automator: AnonymousChatAutomatorConfig | undefined
 ) {
@@ -6325,15 +6325,31 @@ function generateAnonymousChatJsonExport(
   // Filter conversations and their messages (only stranger & bot messages)
   const cleanConversations: any[] = [];
 
-  sessions.forEach((s, idx) => {
+  for (let idx = 0; idx < sessions.length; idx++) {
+    const s = sessions[idx];
     const rawTranscript = s.transcript || [];
     const validMessages = rawTranscript
-      .filter(
-        (m) => m.sender === 'stranger' || m.sender === 'me_melody' || m.sender === 'operator_manual'
-      )
+      .filter((m) => {
+        if (!m || !m.text) return false;
+        const txt = String(m.text).trim();
+        if (!txt) return false;
+        // Ignore internal logs & bot system notifications
+        if (
+          m.sender === 'bot_system' ||
+          txt.startsWith('📋 پیام سیستم ربات') ||
+          txt.startsWith('🛑') ||
+          txt.startsWith('🟢') ||
+          txt.startsWith('🔄') ||
+          txt.startsWith('ارسال دستور شروع') ||
+          txt.startsWith('کلیک بر روی دکمه')
+        ) {
+          return false;
+        }
+        return true;
+      })
       .map((m) => ({
-        sender: m.sender === 'stranger' ? 'stranger' : 'bot',
-        text: (m.text || '').trim(),
+        sender: (m.sender === 'stranger' ? 'stranger' : 'bot') as 'stranger' | 'bot',
+        text: String(m.text || '').trim(),
         timestamp: m.timestamp || new Date().toISOString(),
       }))
       .filter((m) => m.text.length > 0);
@@ -6341,12 +6357,74 @@ function generateAnonymousChatJsonExport(
     if (validMessages.length > 0) {
       cleanConversations.push({
         conversationIndex: s.sessionIndex || (sessions.length - idx),
-        startedAt: s.startedAt,
-        endedAt: s.endedAt,
+        startedAt: s.startedAt || new Date().toISOString(),
+        endedAt: s.endedAt || new Date().toISOString(),
         messages: validMessages,
       });
     }
-  });
+  }
+
+  // If no conversations found in state memory, attempt to reconstruct from real Telegram messages
+  if (cleanConversations.length === 0) {
+    try {
+      const client = await getOrInitTgClient();
+      const selectedBot = automator?.bots.find((b) => b.id === automator.selectedBotId) || automator?.bots[0];
+      if (client && selectedBot) {
+        const botUsernameClean = selectedBot.botUsername.replace('@', '').replace('t.me/', '').trim();
+        const botEntity = await client.getEntity(botUsernameClean);
+        const tgMsgs = await client.getMessages(botEntity, { limit: 100 });
+
+        if (tgMsgs && tgMsgs.length > 0) {
+          const reconstructedMsgs: Array<{ sender: 'stranger' | 'bot'; text: string; timestamp: string }> = [];
+
+          // Sort messages in chronological order (oldest to newest)
+          const chronological = [...tgMsgs].reverse();
+
+          for (const m of chronological) {
+            const txt = (m.message || '').trim();
+            if (!txt) continue;
+
+            if (m.out) {
+              // Outgoing message sent by user/bot
+              const isCmd =
+                txt.startsWith('/') ||
+                (selectedBot.entrySteps || []).some((step) => step.label && txt === step.label.trim()) ||
+                (selectedBot.exitSteps || []).some((step) => step.label && txt === step.label.trim());
+
+              if (!isCmd) {
+                reconstructedMsgs.push({
+                  sender: 'bot',
+                  text: txt,
+                  timestamp: new Date((m.date || Date.now() / 1000) * 1000).toISOString(),
+                });
+              }
+            } else {
+              // Incoming message from bot or stranger
+              const isSys = isSystemOrBotMessage(txt, m.replyMarkup, selectedBot);
+              if (!isSys) {
+                reconstructedMsgs.push({
+                  sender: 'stranger',
+                  text: txt,
+                  timestamp: new Date((m.date || Date.now() / 1000) * 1000).toISOString(),
+                });
+              }
+            }
+          }
+
+          if (reconstructedMsgs.length > 0) {
+            cleanConversations.push({
+              conversationIndex: 1,
+              startedAt: reconstructedMsgs[0]?.timestamp || new Date().toISOString(),
+              endedAt: reconstructedMsgs[reconstructedMsgs.length - 1]?.timestamp || new Date().toISOString(),
+              messages: reconstructedMsgs,
+            });
+          }
+        }
+      }
+    } catch (tgErr) {
+      console.warn('[چت ناشناس] بازیابی مستقیم از تلگرام با اخطار مواجه شد:', tgErr);
+    }
+  }
 
   return {
     exportedAt: new Date().toISOString(),
@@ -6377,19 +6455,25 @@ app.get('/api/anonymous/state', (req, res) => {
   });
 });
 
-app.get('/api/anonymous/export-history', (req, res) => {
+app.get('/api/anonymous/export-history', async (req, res) => {
   try {
     const automator = appState.anonymousAutomator;
     const history = appState.anonymousSessionHistory || [];
 
-    // Also include active session if currently in progress
+    // Also include active sessions if currently in progress or stored in appState
     const allSessions = [...history];
     if (activeAnonChatSession && !allSessions.some((s) => s.id === activeAnonChatSession?.id)) {
       allSessions.unshift({ ...activeAnonChatSession });
     }
+    if (
+      appState.activeAnonymousSession &&
+      !allSessions.some((s) => s.id === appState.activeAnonymousSession?.id)
+    ) {
+      allSessions.unshift({ ...appState.activeAnonymousSession });
+    }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const exportData = generateAnonymousChatJsonExport(allSessions, automator);
+    const exportData = await generateAnonymousChatJsonExport(allSessions, automator);
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader(
@@ -6405,6 +6489,12 @@ app.get('/api/anonymous/export-history', (req, res) => {
 
 app.post('/api/anonymous/clear-history', (req, res) => {
   appState.anonymousSessionHistory = [];
+  if (activeAnonChatSession) {
+    activeAnonChatSession.transcript = [];
+  }
+  if (appState.activeAnonymousSession) {
+    appState.activeAnonymousSession.transcript = [];
+  }
   saveData();
   addLog('info', '[چت ناشناس] تاریخچه تمامی مکالمات ضبط‌شده قبلی پاکسازی گردید.');
   res.json({ success: true, message: 'تاریخچه مکالمات با موفقیت پاکسازی شد.', history: [] });

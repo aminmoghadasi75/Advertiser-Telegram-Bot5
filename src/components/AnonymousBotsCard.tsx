@@ -290,17 +290,16 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
               {history.length || config?.stats?.totalChatsInitiated || 0} <span className="text-[10px] text-slate-400 font-normal">جلسه</span>
             </div>
           </div>
-          {history.length > 0 && (
-            <button
-              type="button"
-              onClick={handleQuickDownload}
-              disabled={isDownloading}
-              className="mt-1.5 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
-            >
-              <Download className="w-3 h-3" />
-              <span>دانلود JSON مکالمات</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleQuickDownload}
+            disabled={isDownloading}
+            className="mt-1.5 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95"
+            title="دانلود فایل JSON شامل ساختار دستورالعمل‌ها و مکالمات"
+          >
+            <Download className="w-3 h-3" />
+            <span>دانلود JSON مکالمات</span>
+          </button>
         </div>
 
         <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-center">

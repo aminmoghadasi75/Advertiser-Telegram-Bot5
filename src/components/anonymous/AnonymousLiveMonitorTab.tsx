@@ -242,7 +242,7 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
               id="download-anon-json-btn"
               type="button"
               onClick={handleDownloadJson}
-              disabled={isDownloading || allRecordedSessions.length === 0}
+              disabled={isDownloading}
               className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-md active:scale-95"
               title="دانلود فایل ساختاریافته JSON شامل دستورالعمل‌ها و پیام‌های مخاطب و ربات"
             >
