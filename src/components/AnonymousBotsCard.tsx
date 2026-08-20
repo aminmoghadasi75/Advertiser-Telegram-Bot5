@@ -4,6 +4,7 @@ import {
   AnonymousBotProfile,
   AnonymousChatInstructions,
   AnonymousChatSession,
+  AnonymousPromptTestRun,
   TelegramAccount,
   TelegramCredentials,
 } from '../types';
@@ -11,6 +12,7 @@ import { AnonymousBotsListTab } from './anonymous/AnonymousBotsListTab';
 import { AnonymousAiInstructionsTab } from './anonymous/AnonymousAiInstructionsTab';
 import { AnonymousSimulatorTab } from './anonymous/AnonymousSimulatorTab';
 import { AnonymousLiveMonitorTab } from './anonymous/AnonymousLiveMonitorTab';
+import { AnonymousAnalyticsTab } from './anonymous/AnonymousAnalyticsTab';
 import {
   Bot,
   Sparkles,
@@ -28,12 +30,16 @@ import {
   ChevronDown,
   Download,
   FileText,
+  FileCode,
+  TrendingUp,
 } from 'lucide-react';
 
 interface AnonymousBotsCardProps {
   config?: AnonymousChatAutomatorConfig;
   activeSession?: AnonymousChatSession;
   history?: AnonymousChatSession[];
+  currentTestRun?: AnonymousPromptTestRun | null;
+  previousTestRuns?: AnonymousPromptTestRun[];
   isConnected: boolean;
   credentials?: TelegramCredentials;
   accounts?: TelegramAccount[];
@@ -55,6 +61,8 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   config,
   activeSession,
   history = [],
+  currentTestRun,
+  previousTestRuns = [],
   isConnected,
   credentials,
   accounts = [],
@@ -71,7 +79,7 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   onSendManualMessage,
   onClearHistory,
 }) => {
-  const [activeTab, setActiveTab] = useState<'bots' | 'instructions' | 'simulator' | 'live_chat'>('bots');
+  const [activeTab, setActiveTab] = useState<'bots' | 'instructions' | 'simulator' | 'live_chat' | 'analytics'>('bots');
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -83,7 +91,9 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
       link.href = url;
       link.setAttribute(
         'download',
-        `anonymous_chat_analysis_${new Date().toISOString().slice(0, 10)}.${format}`
+        format === 'json'
+          ? `prompt_evaluation_run_${new Date().toISOString().slice(0, 10)}.json`
+          : `anonymous_chat_analysis_${new Date().toISOString().slice(0, 10)}.txt`
       );
       document.body.appendChild(link);
       link.click();
@@ -285,22 +295,14 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
 
         <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-between">
           <div>
-            <div className="text-[11px] text-slate-400">کل مکالمات ضبط‌شده</div>
+            <div className="text-[11px] text-slate-400">مکالمات آخرین اجرا (Run)</div>
             <div className="text-sm font-bold text-white mt-0.5">
-              {history.length || config?.stats?.totalChatsInitiated || 0} <span className="text-[10px] text-slate-400 font-normal">جلسه</span>
+              {history.length || 0} <span className="text-[10px] text-slate-400 font-normal">مخاطب</span>
             </div>
           </div>
-          {history.length > 0 && (
-            <button
-              type="button"
-              onClick={() => handleQuickDownload('txt')}
-              disabled={isDownloading}
-              className="mt-1.5 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
-            >
-              <Download className="w-3 h-3" />
-              <span>دانلود آنالیز (.TXT)</span>
-            </button>
-          )}
+          <div className="text-[10px] text-slate-500 mt-1">
+            از شروع اخیر
+          </div>
         </div>
 
         <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-between">
@@ -315,10 +317,11 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
               type="button"
               onClick={() => handleQuickDownload('json')}
               disabled={isDownloading}
-              className="mt-1.5 py-1 px-2 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+              className="mt-1.5 py-1 px-2.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+              title="دانلود فایل JSON مکالمات آخرین دوره شروع"
             >
               <Download className="w-3 h-3" />
-              <span>داده‌های ساختاریافته (.JSON)</span>
+              <span>دانلود خروجی (.JSON)</span>
             </button>
           )}
         </div>
@@ -380,6 +383,19 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-0.5 right-2" />
           )}
         </button>
+
+        <button
+          id="tab-analytics-btn"
+          onClick={() => setActiveTab('analytics')}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-xl border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'analytics'
+              ? 'border-amber-500 text-amber-300 bg-slate-900 font-bold'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>۵. آمار و نرخ تبدیل (Analytics)</span>
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -409,10 +425,16 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
             activeSession={activeSession}
             config={config}
             history={history}
+            currentTestRun={currentTestRun}
+            previousTestRuns={previousTestRuns}
             onNextStranger={onNextStranger}
             onSendManualMessage={onSendManualMessage}
             onClearHistory={onClearHistory}
           />
+        )}
+
+        {activeTab === 'analytics' && (
+          <AnonymousAnalyticsTab config={config} history={history} />
         )}
       </div>
     </div>

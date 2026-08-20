@@ -295,56 +295,30 @@ export const SchedulerCard: React.FC<SchedulerCardProps> = ({
         </div>
       </div>
 
-      {/* Unified Action Controls Panel: Side-by-Side Send & Stop Operations */}
-      <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isSendingNow ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'}`} />
-            {isSendingNow ? 'وضعیت: در حال ارسال همزمان به گروه‌ها...' : 'وضعیت: آماده برای شروع عملیات'}
-          </span>
-          <span className="text-[11px] text-slate-400 font-mono">
-            کل ارسال موفق: <strong className="text-emerald-400 font-bold">{scheduler.totalSuccessCount.toLocaleString('fa-IR')}</strong>
-          </span>
+      {/* Save Settings Status Bar */}
+      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>تنظیمات فواصل و محافظت هوشمند آماده اعمال در ارسال‌ها است.</span>
         </div>
 
-        {/* Side-by-Side Action Button Cluster */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {/* Button 1: Start Broadcast */}
-          <button
-            onClick={onSendNow}
-            disabled={isSendingNow}
-            className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs transition-all shadow-md active:scale-95 ${
-              isSendingNow
-                ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 cursor-not-allowed opacity-75'
-                : 'bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-emerald-500/25'
-            }`}
-          >
-            <Send className={`w-4 h-4 ${isSendingNow ? 'animate-bounce' : ''}`} />
-            <span>{isSendingNow ? 'ارسال در حال انجام...' : 'شروع ارسال به گروه‌ها'}</span>
-          </button>
-
-          {/* Button 2: Stop Broadcast (Side-by-Side) */}
-          <button
-            onClick={async () => {
-              if (!onStopBroadcast) return;
-              setIsStopping(true);
-              try {
-                await onStopBroadcast();
-              } finally {
-                setIsStopping(false);
-              }
-            }}
-            disabled={!isSendingNow || isStopping}
-            className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs transition-all shadow-md active:scale-95 ${
-              isSendingNow
-                ? 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-rose-600/30 animate-pulse cursor-pointer'
-                : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
-            }`}
-          >
-            <StopCircle className="w-4 h-4" />
-            <span>{isStopping ? 'در حال لغو...' : 'توقف فوری ارسال'}</span>
-          </button>
-        </div>
+        <button
+          onClick={() => handleSaveScheduler()}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-md transition-all active:scale-95"
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>در حال ذخیره...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>ذخیره تنظیمات زمان‌بندی</span>
+            </>
+          )}
+        </button>
       </div>
 
     </div>

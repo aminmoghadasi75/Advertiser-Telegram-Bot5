@@ -34,13 +34,12 @@ export const AnonymousSimulatorTab: React.FC<AnonymousSimulatorTabProps> = ({
 
   const quickPrompts = [
     'سلام اصل میدی؟',
-    'سلام\nخوبی؟\nسارا ۲۲ تهرانم تو چی؟',
-    'دختری یا پسر؟',
-    'چند سالته و کجایی؟',
-    'چیکارا میکنی؟',
-    'عکس میدی؟',
-    'ویس بده صداتو بشنوم',
-    'آیدی یا شماره میدی؟',
+    'سلام چطوری؟ خوبی؟',
+    'اینستاگرامم اصلاً وصل نمیشه، تو فیلترشکن خوب سراغ داری؟',
+    'چیکارا میکنی الان؟ مشغولی؟',
+    'دختری یا پسر؟ کجایی هستی؟',
+    'عکس میدی ببینمت؟',
+    'آیدی یا کانال تلگرام داری؟',
     'رباتی یا آدم واقعی؟',
     'حالم اصلا خوب نیست دلم گرفته',
   ];
@@ -50,17 +49,6 @@ export const AnonymousSimulatorTab: React.FC<AnonymousSimulatorTabProps> = ({
     const batch = ['سلام چطوری؟', 'اصل میدی آشنا شیم؟', 'چیکارا میکنی الان؟'];
     const unifiedText = batch.join('\n');
     handleSend(unifiedText);
-  };
-
-  const handleSendSystemAlertTest = () => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        sender: 'stranger' as const,
-        text: '🚫 اخطار: به هیچ کاربری در ربات اعتماد نکنید و اطلاعات شخصیتان را در اختیارشان قرار ندهید',
-        time: 'سیستم',
-      },
-    ]);
   };
 
   const handleSend = async (customText?: string) => {
@@ -79,13 +67,13 @@ export const AnonymousSimulatorTab: React.FC<AnonymousSimulatorTabProps> = ({
     const maxMsgs = instructions.maxMessagesPerChat || 4;
     const promo = instructions.productPromotion;
 
-    const isPromoStep =
+    const isFixedPromoStep =
       promo?.enabled &&
       ((promo.sendMode === 'send_photo_with_caption_before_exit' && currentAiCount >= maxMsgs - 1) ||
         (promo.sendMode === 'send_custom_card_at_step' && currentAiCount === (promo.sendAtMessageNumber || 2) - 1));
 
     try {
-      if (isPromoStep && promo) {
+      if (isFixedPromoStep && promo) {
         if (instructions.enablePreExitFarewell !== false) {
           let farewellText = instructions.preExitFarewellText || 'خب عزیزم من کار برام پیش اومد باید برم، مراقب خودت باش 🌸';
           if (instructions.farewellMode === 'random_list' && instructions.preExitFarewells?.length) {
@@ -131,13 +119,26 @@ export const AnonymousSimulatorTab: React.FC<AnonymousSimulatorTabProps> = ({
         });
 
         const data = await res.json();
-        if (data.reply) {
+        const replyText = data.reply || 'مرسی منم خوبم، چیکارا میکنی؟';
+
+        if (
+          promo?.enabled &&
+          promo.sendMode === 'ai_natural_mention' &&
+          (data.shouldSendPromoCard || (data.promoMentioned && promo.aiSendBannerWithPitch !== false && promo.imageUrl))
+        ) {
+          // AI dynamically triggered promo in this turn
+          let finalPromoText = replyText;
+          if (promo.contactHandleOrLink && !finalPromoText.includes(promo.contactHandleOrLink)) {
+            finalPromoText += `\n💬 آیدی: ${promo.contactHandleOrLink}`;
+          }
           setMessages((prev) => [
             ...prev,
             {
               sender: 'ai' as const,
-              text: data.reply,
-              time: 'هم‌اکنون',
+              text: finalPromoText,
+              imageUrl: promo.imageUrl,
+              isPromo: true,
+              time: 'هم‌اکنون (معرفی هوشمند AI 🧠)',
             },
           ]);
         } else {
@@ -145,8 +146,9 @@ export const AnonymousSimulatorTab: React.FC<AnonymousSimulatorTabProps> = ({
             ...prev,
             {
               sender: 'ai' as const,
-              text: 'مرسی منم خوبم، چیکارا میکنی؟',
-              time: 'هم‌اکنون',
+              text: replyText,
+              isPromo: Boolean(data.promoMentioned),
+              time: data.promoMentioned ? 'هم‌اکنون (معرفی در متن 💬)' : 'هم‌اکنون',
             },
           ]);
         }

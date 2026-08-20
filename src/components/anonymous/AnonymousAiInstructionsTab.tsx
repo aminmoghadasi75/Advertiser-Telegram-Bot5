@@ -101,6 +101,9 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
   const [rawInappropriateKeywords, setRawInappropriateKeywords] = useState<string>(
     (instructions.inappropriateKeywords || []).join(' - ')
   );
+  const [rawSpamBotKeywords, setRawSpamBotKeywords] = useState<string>(
+    (instructions.spamBotKeywords || []).join(' - ')
+  );
 
   // Only synchronize from props if the user does NOT have active unsaved edits (isDirty = false)
   useEffect(() => {
@@ -110,6 +113,7 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
       setLocalInstructions(instructions);
       setRawIgnoredPhrases((instructions.customIgnoredSystemPhrases || []).join(' - '));
       setRawInappropriateKeywords((instructions.inappropriateKeywords || []).join(' - '));
+      setRawSpamBotKeywords((instructions.spamBotKeywords || []).join(' - '));
     }
   }, [instructions, isDirty]);
 
@@ -416,19 +420,34 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
 
               {/* Contact Handle or Link */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
-                  آیدی پشتیبانی، کانال تلگرام یا لینک تماس:
+                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
+                    آیدی پشتیبانی تلگرام (بدون کاراکتر @):
+                  </span>
+                  <span className="text-[10px] text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
+                    ارسال فقط بعد از ۲ دقیقه
+                  </span>
                 </label>
                 <input
                   type="text"
                   value={promo.contactHandleOrLink || ''}
-                  onChange={(e) => updatePromoField('contactHandleOrLink', e.target.value)}
-                  placeholder="@MyChannel یا @SupportAdmin"
+                  onChange={(e) => updatePromoField('contactHandleOrLink', e.target.value.replace('@', ''))}
+                  placeholder="nova_vpn10"
                   className="w-full bg-slate-900 border border-slate-800 focus:border-sky-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none font-mono text-left"
                   dir="ltr"
                 />
               </div>
+            </div>
+
+            {/* 2-Minute Strict Rule Banner Notice */}
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200 leading-relaxed space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                <span>⏱️ قانون حیاتی ارسال عکس، اعداد و آیدی (محدودیت ۲ دقیقه):</span>
+              </div>
+              <p className="text-[11px] opacity-90">
+                در مکالمات <strong>زیر ۲ دقیقه</strong>، ارسال هرگونه عکس، بنر، اعداد (به حروف فارسی تبدیل می‌شود)، کلمات انگلیسی و آیدی پشتیبانی اکیداً ممنوع و مسدود است. آیدی پشتیبانی دقیقاً به صورت <strong>nova_vpn10</strong> (بدون @) و عکس محصول <strong>صرفاً پس از گذشت ۲ دقیقه مکالمه واقعی</strong> توسط ربات هوشمند ارسال خواهد شد.
+              </p>
             </div>
 
             {/* Product Description / Pitch Text */}
@@ -496,7 +515,12 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs">💬 معرفی هوشمندانه توسط AI</span>
+                    <span className="font-bold text-xs flex items-center gap-1">
+                      <span>🧠 معرفی هوشمند و پویا توسط AI</span>
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full">
+                        هوشمند ⚡
+                      </span>
+                    </span>
                     <input
                       type="radio"
                       name="sendMode"
@@ -506,7 +530,7 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
                     />
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    هوش مصنوعی مشخصات محصول را می‌داند و در خلال مکالمه به صورت نامحسوس و خودمانی آن را به مخاطب پیشنهاد می‌دهد.
+                    هوش مصنوعی مکالمه را تحلیل کرده و در هر زمان از چت که احساس کند موقعیت مناسب است، متن و توضیحات را به صورت خودمانی و طبیعی به مخاطب پیشنهاد می‌دهد.
                   </p>
                 </div>
 
@@ -543,17 +567,164 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
                 </div>
               </div>
 
-              {/* Exit Guarantee Banner */}
-              <div className="p-3 bg-violet-950/30 border border-violet-700/40 rounded-xl flex items-start gap-2.5 text-xs text-violet-200">
-                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1 leading-relaxed">
-                  <span className="font-bold text-white">تضمین ارسال عکس و متن تبلیغ قبل از خروج:</span>
-                  <p className="text-[11px] text-violet-300">
-                    اگر در طول چت پیام تبلیغاتی به هر دلیلی ارسال نشده باشد، ربات به صورت قطعی قبل از کلیک روی دکمه‌های خروج، تصویر بنر و متن توضیحات را ارسال می‌کند و سپس چت را خاتمه می‌دهد. در صورتی که در طی مکالمه قبلاً ارسال شده باشد، نیازی به ارسال مجدد نیست و تکرار نمی‌شود.
+              {/* Special options when AI Smart Mention is active */}
+              {promo.sendMode === 'ai_natural_mention' && (
+                <div className="p-3.5 bg-fuchsia-950/20 border border-fuchsia-800/40 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-fuchsia-400" />
+                      <span className="font-bold text-xs text-white">تنظیمات هوشمندی AI در انتخاب زمان ارسال:</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+                      <span className="text-[11px] font-semibold text-slate-300">
+                        {promo.aiSendBannerWithPitch !== false ? 'ارسال عکس بنر فعال' : 'فقط متن خودمانی'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={promo.aiSendBannerWithPitch !== false}
+                        onChange={(e) => updatePromoField('aiSendBannerWithPitch', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-fuchsia-600"></div>
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-fuchsia-200/90 leading-relaxed">
+                    💡 <strong>نحوه عملکرد:</strong> هوش مصنوعی مکالمه کاربر را بررسی می‌کند. اگر مخاطب درباره نیازها، وضعیت نت، علایق یا اصل صحبت کند، یا پس از چند پیام چت صمیمی، هوش مصنوعی در هر لحظه‌ای که حس کند بهترین زمان است، متن و توضیحات تبلیغ را می‌فرستد و در صورت فعال بودن گزینه بالا، عکس بنر نیز همزمان ارسال می‌شود.
                   </p>
+                </div>
+              )}
+
+              {/* 2-Minute Photo Delay Rule & Exit Guarantee Banner */}
+              <div className="space-y-2">
+                <div className="p-3 bg-amber-950/30 border border-amber-600/40 rounded-xl flex items-start gap-2.5 text-xs text-amber-200">
+                  <Clock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1 leading-relaxed">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-bold text-white">قانون محدودیت زمانی ۲ دقیقه برای ارسال عکس به ناشناس:</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono">
+                        حداقل ۲ دقیقه (۱۲۰ ثانیه)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/90">
+                      طبق سازوکار ربات‌های چت ناشناس، ارسال عکس زودتر از ۲ دقیقه از شروع مکالمه برای مخاطب ناشناس قابل مشاهده نیست. ربات به طور خودکار این زمان را محاسبه کرده و تا قبل از ۲ دقیقه متن کامل را ارسال می‌کند و پس از گذشت ۲ دقیقه عکس بنر را می‌فرستد.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-violet-950/30 border border-violet-700/40 rounded-xl flex items-start gap-2.5 text-xs text-violet-200">
+                  <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1 leading-relaxed">
+                    <span className="font-bold text-white">تضمین ارسال عکس و متن تبلیغ قبل از هرگونه خروج زودهنگام:</span>
+                    <p className="text-[11px] text-violet-300">
+                      در تمامی شرایط خروج (اتمام سقف پیام‌ها، قطع زودهنگام توسط مخاطب، اعلام خداحافظی یا اتمام زمان)، ربات تضمین می‌کند که بنر و متن تبلیغاتی قبل از آغاز توالی دکمه‌های خروج به مخاطب تحویل داده شود (مگر اینکه در حین مکالمه قبلاً ارسال شده باشد).
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Feature 2: Product FAQ & Knowledge Base (پایگاه دانش سوالات متداول و پاسخ‌های هوشمند) */}
+            <div className="p-4 bg-slate-900/80 border border-fuchsia-500/40 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-fuchsia-400" />
+                    <div>
+                      <h5 className="font-bold text-xs text-white">پایگاه دانش سوالات متداول و پاسخ‌های محصول (Product FAQ & Knowledge Base)</h5>
+                      <p className="text-[11px] text-slate-400">
+                        پاسخ‌دهی دقیق و هوشمندانه به سوالات مخاطبان درباره قیمت، تست رایگان، سرعت، تخفیف، آی‌پی ثابت و روش پرداخت
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Free Text Knowledge Base Area */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>توضیحات تکمیلی، پلن‌های قیمتی و گارانتی محصول:</span>
+                    <span className="text-[10px] text-slate-500">برای درک عمیق‌تر مدل هوش مصنوعی</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={promo.knowledgeBaseText || ''}
+                    onChange={(e) => updatePromoField('knowledgeBaseText', e.target.value)}
+                    placeholder="مثال: اکانت یک‌ماهه ۵۰ تومن، سه‌ماهه ۱۲۰ تومن. سرورها پرسرعت آلمان و فنلاند با آی‌پی ثابت مخصوص ترید و اینستاگرام. دارای تست رایگان ۲ ساعته..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-fuchsia-500 rounded-xl p-3 text-xs text-white placeholder:text-slate-600 focus:outline-none leading-relaxed font-sans"
+                  />
+                </div>
+
+                {/* FAQ Structured Items List */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200">
+                      پرسش‌ها و پاسخ‌های کلیدی ({promo.faqItems?.length || 0} مورد):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const curList = [...(promo.faqItems || [])];
+                        curList.push({
+                          id: 'faq_' + Date.now(),
+                          question: '',
+                          answer: '',
+                          keywords: [],
+                        });
+                        updatePromoField('faqItems', curList);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-fuchsia-950/60 hover:bg-fuchsia-900 border border-fuchsia-600/40 text-fuchsia-300 text-[11px] font-semibold flex items-center gap-1 transition-all"
+                    >
+                      <span>+ افزودن پرسش و پاسخ جدید</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-0.5">
+                    {(promo.faqItems && promo.faqItems.length > 0 ? promo.faqItems : []).map((faq, fIdx) => (
+                      <div key={faq.id || fIdx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-fuchsia-400 font-bold w-5 text-center font-mono">Q{fIdx + 1}</span>
+                          <input
+                            type="text"
+                            value={faq.question}
+                            onChange={(e) => {
+                              const cur = [...(promo.faqItems || [])];
+                              cur[fIdx] = { ...cur[fIdx], question: e.target.value };
+                              updatePromoField('faqItems', cur);
+                            }}
+                            placeholder="سوال مخاطب (مثلاً: تست رایگان داری؟ یا قیمتش چنده؟)"
+                            className="flex-1 bg-slate-900 border border-slate-800 focus:border-fuchsia-500 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = [...(promo.faqItems || [])];
+                              cur.splice(fIdx, 1);
+                              updatePromoField('faqItems', cur);
+                            }}
+                            className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
+                            title="حذف این پرسش"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] text-emerald-400 font-bold w-5 text-center font-mono mt-2">A{fIdx + 1}</span>
+                          <textarea
+                            rows={2}
+                            value={faq.answer}
+                            onChange={(e) => {
+                              const cur = [...(promo.faqItems || [])];
+                              cur[fIdx] = { ...cur[fIdx], answer: e.target.value };
+                              updatePromoField('faqItems', cur);
+                            }}
+                            placeholder="پاسخ صمیمی و خودمانی (مثلاً: آره عزیزم تست ۲ ساعته رایگان داریم، به آیدی پیام بدی برات می‌فرسته)"
+                            className="flex-1 bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none leading-relaxed"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
             {/* Dedicated Save Button for Product Promotion */}
             <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-3 bg-slate-950/40 p-3 rounded-xl">
@@ -1343,6 +1514,255 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
         </div>
       </div>
 
+      {/* ========================================================================= */}
+      {/* 5. MULTI-BUBBLE MESSAGING (ارسال پیام‌های چندتکه‌ای طبیعی و روان) */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/60 p-4 sm:p-5 rounded-2xl border border-violet-500/30 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/20 text-violet-400 flex items-center justify-center font-bold text-xs border border-violet-500/30 shadow">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-white">ارسال پیام‌های چندتکه‌ای طبیعی (Multi-Bubble Messaging)</h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30 font-medium">
+                  احساس انسانی ۱۰۰٪
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                شکستن خودکار پاسخ‌های چندجمله‌ای هوش مصنوعی به پیام‌های متوالی و کوتاه با مکث طبیعی بین آن‌ها (دقیقاً مثل چت انسانی)
+              </p>
+            </div>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+            <span className="text-xs font-semibold text-slate-300">
+              {(localInstructions.enableMultiBubble ?? true) ? 'فعال' : 'غیرفعال'}
+            </span>
+            <input
+              type="checkbox"
+              checked={localInstructions.enableMultiBubble ?? true}
+              onChange={(e) => updateField('enableMultiBubble', e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
+          </label>
+        </div>
+
+        {(localInstructions.enableMultiBubble ?? true) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-800/80">
+            <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>حداکثر تعداد حباب در هر نوبت پاسخ:</span>
+                <span className="text-violet-400 font-bold font-mono text-xs">
+                  {localInstructions.multiBubbleMaxChunks ?? 3} حباب (پیام)
+                </span>
+              </label>
+              <input
+                type="range"
+                min="2"
+                max="5"
+                step="1"
+                value={localInstructions.multiBubbleMaxChunks ?? 3}
+                onChange={(e) => updateField('multiBubbleMaxChunks', parseInt(e.target.value) || 3)}
+                className="w-full accent-violet-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-500">
+                اگر پاسخ هوش مصنوعی طولانی باشد، حداکثر به این تعداد پیام کوتاه تفکیک و فرستاده می‌شود.
+              </p>
+            </div>
+
+            <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>مکث بین حباب‌های پیام متوالی:</span>
+                <span className="text-violet-400 font-bold font-mono text-xs">
+                  {(localInstructions.multiBubbleDelaySeconds ?? 1.2).toFixed(1)} ثانیه
+                </span>
+              </label>
+              <input
+                type="range"
+                min="0.5"
+                max="3.0"
+                step="0.1"
+                value={localInstructions.multiBubbleDelaySeconds ?? 1.2}
+                onChange={(e) => updateField('multiBubbleDelaySeconds', parseFloat(e.target.value) || 1.2)}
+                className="w-full accent-violet-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-500">
+                فاصله زمانی کوتاه همراه با انیمیشن تایپ بین ارسال هر حباب تا حباب بعدی.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 6. DYNAMIC REALISTIC TYPING SPEED (شبیه‌سازی سرعت تایپ پویا و واقع‌گرایانه) */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/60 p-4 sm:p-5 rounded-2xl border border-sky-500/30 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-xs border border-sky-500/30 shadow">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-white">سرعت تایپ پویا متناسب با طول پیام (Dynamic Typing Speed)</h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 font-medium">
+                  شبیه‌سازی تایپ دست
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                محاسبه زمان مکث تایپ بر اساس تعداد حروف متن به علاوه خطای انسانی و لرزش تصادفی (Jitter)
+              </p>
+            </div>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+            <span className="text-xs font-semibold text-slate-300">
+              {(localInstructions.dynamicTypingSpeed ?? true) ? 'فعال' : 'غیرفعال'}
+            </span>
+            <input
+              type="checkbox"
+              checked={localInstructions.dynamicTypingSpeed ?? true}
+              onChange={(e) => updateField('dynamicTypingSpeed', e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
+          </label>
+        </div>
+
+        {(localInstructions.dynamicTypingSpeed ?? true) && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80">
+            <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>سرعت تایپ هر حرف:</span>
+                <span className="text-sky-400 font-bold font-mono text-xs">
+                  {localInstructions.typingSpeedMsPerChar ?? 35} ms/حرف
+                </span>
+              </label>
+              <input
+                type="range"
+                min="15"
+                max="80"
+                step="5"
+                value={localInstructions.typingSpeedMsPerChar ?? 35}
+                onChange={(e) => updateField('typingSpeedMsPerChar', parseInt(e.target.value) || 35)}
+                className="w-full accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-500">
+                سرعت شبیه‌سازی تایپ یک کاربر سریع در کیبورد گوشی (۳۵ میلی‌ثانیه میانگین استاندارد است).
+              </p>
+            </div>
+
+            <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>حداقل تاخیر تایپ:</span>
+                <span className="text-sky-400 font-bold font-mono text-xs">
+                  {(localInstructions.minTypingDelaySeconds ?? 0.8).toFixed(1)} ثانیه
+                </span>
+              </label>
+              <input
+                type="range"
+                min="0.4"
+                max="3.0"
+                step="0.2"
+                value={localInstructions.minTypingDelaySeconds ?? 0.8}
+                onChange={(e) => updateField('minTypingDelaySeconds', parseFloat(e.target.value) || 0.8)}
+                className="w-full accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-500">حتی برای پاسخ‌های تک کلمه‌ای، این مقدار حداقل مکث اعمال می‌شود.</p>
+            </div>
+
+            <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>سقف حداکثر تاخیر:</span>
+                <span className="text-sky-400 font-bold font-mono text-xs">
+                  {(localInstructions.maxTypingDelaySeconds ?? 4.5).toFixed(1)} ثانیه
+                </span>
+              </label>
+              <input
+                type="range"
+                min="2.0"
+                max="8.0"
+                step="0.5"
+                value={localInstructions.maxTypingDelaySeconds ?? 4.5}
+                onChange={(e) => updateField('maxTypingDelaySeconds', parseFloat(e.target.value) || 4.5)}
+                className="w-full accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-500">جلوگیری از معطلی بیش از حد برای پیام‌های طولانی.</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 7. ANTI-SPAM & SPAM BOT FAST SKIP (فیلتر سریع ربات‌ها و ارسال‌کنندگان لینک) */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/60 p-4 sm:p-5 rounded-2xl border border-amber-500/30 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs border border-amber-500/30 shadow">
+              <ShieldAlert className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-white">رد سریع ربات‌های تبلیغاتی و لینک‌های اسپم (Fast Spam/Bot Filter)</h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+                  صرفه‌جویی در زمان و توکن
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                اگر پیام اول مخاطب حاوی لینک کانال، جوین اجباری، بنر تبلیغاتی یا عبارات تبلیغاتی باشد، بات فوراً لفت داده و وقت را هدر نمی‌دهد
+              </p>
+            </div>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+            <span className="text-xs font-semibold text-slate-300">
+              {(localInstructions.autoSkipSpamBots ?? true) ? 'فعال' : 'غیرفعال'}
+            </span>
+            <input
+              type="checkbox"
+              checked={localInstructions.autoSkipSpamBots ?? true}
+              onChange={(e) => updateField('autoSkipSpamBots', e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+          </label>
+        </div>
+
+        {(localInstructions.autoSkipSpamBots ?? true) && (
+          <div className="space-y-2 pt-2 border-t border-slate-800/80">
+            <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+              <span>کلمات و الگوهای شناسایی ربات تبلیغاتی (جدا شده با خط تیره -):</span>
+              <span className="text-[10px] text-amber-400 font-mono">
+                {(localInstructions.spamBotKeywords || []).length} الگوی ثبت‌شده
+              </span>
+            </label>
+            <input
+              type="text"
+              value={rawSpamBotKeywords}
+              onChange={(e) => {
+                const val = e.target.value;
+                setRawSpamBotKeywords(val);
+                const parsed = val
+                  .split(/[-–—]/)
+                  .map((k) => k.trim())
+                  .filter(Boolean);
+                updateField('spamBotKeywords', parsed);
+              }}
+              placeholder="مثال: t.me/ - https:// - جوین شین - کانال تلگرام - ربات زیر - پورن - شارژ رایگان"
+              className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-sans"
+            />
+            <p className="text-[10px] text-slate-400">
+              ⚡ در صورت دریافت پیامی با هر یک از این الگوها، بدون مصرف توکن و ارسال پاسخ هوش مصنوعی، دکمه بعدی زده می‌شود و در آمار به عنوان ربات اسپم ثبت می‌گردد.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Dialogue Rules & Exit Limits */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Max Messages Limit */}
@@ -1536,6 +1956,37 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
           <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">مشاهده پروفایل هایپرگپ</span>
           <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">جمله خوش‌آمدگویی/اتصال</span>
         </div>
+      </div>
+
+      {/* Auto-Exit on Partner Goodbye / Exit Intent */}
+      <div className="bg-slate-950/60 p-4 sm:p-5 rounded-2xl border border-rose-500/30 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs">
+              <LogOut className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-bold text-xs text-white">تشخیص هوشمند خداحافظی مخاطب و خروج خودکار</h4>
+              <p className="text-[11px] text-slate-400">شناسایی قصد خروج یا خداحافظی هم‌صحبت و ارسال تبلیغ قبل از ترک چت</p>
+            </div>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+            <span className="text-xs font-semibold text-slate-300">
+              {(localInstructions.autoExitOnPartnerBye ?? true) ? 'فعال' : 'غیرفعال'}
+            </span>
+            <input
+              type="checkbox"
+              checked={localInstructions.autoExitOnPartnerBye ?? true}
+              onChange={(e) => updateField('autoExitOnPartnerBye', e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
+          </label>
+        </div>
+        <p className="text-[11px] text-slate-400 leading-relaxed">
+          اگر مخاطب کلماتی نظیر «خداحافظ»، «بای»، «باید برم»، «فعلا» یا «لفت بده» ارسال کند، ربات معطل نمانده، پیام خداحافظی و تبلیغ محصول را ارسال نموده و بلافاصله توالی دکمه‌های خروج را اجرا می‌کند.
+        </p>
       </div>
 
       {/* Inappropriate words protection */}

@@ -21,7 +21,22 @@ import {
   AnonymousBotProfile,
   AnonymousChatAutomatorConfig,
 } from './types';
-import { Send, Key, Sparkles, HelpCircle, Layers, CheckCircle, Bot, Megaphone } from 'lucide-react';
+import {
+  Send,
+  Power,
+  Sparkles,
+  Layers,
+  CheckCircle,
+  Bot,
+  Megaphone,
+  Users,
+  Terminal,
+  ShieldCheck,
+  StopCircle,
+  RefreshCw,
+  PlusCircle,
+  TrendingUp,
+} from 'lucide-react';
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>({
@@ -50,7 +65,8 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [isSendingNow, setIsSendingNow] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'groups' | 'campaign' | 'logs'>('dashboard');
+  const [isStoppingBroadcast, setIsStoppingBroadcast] = useState(false);
+  const [activeMainTab, setActiveMainTab] = useState<'anonymous_bot' | 'group_broadcast' | 'accounts' | 'logs'>('anonymous_bot');
 
   // Fetch complete state from Express backend and sync with localStorage
   const fetchState = async () => {
@@ -291,12 +307,10 @@ export default function App() {
   };
 
   // Stop / Cancel Active Broadcast
-  const [isStoppingBroadcast, setIsStoppingBroadcast] = useState(false);
   const handleStopBroadcast = async () => {
     setIsStoppingBroadcast(true);
     try {
-      const res = await fetch('/api/broadcast/stop', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
+      await fetch('/api/broadcast/stop', { method: 'POST' });
       setIsSendingNow(false);
       await fetchState();
     } catch (err) {
@@ -308,7 +322,7 @@ export default function App() {
     }
   };
 
-  // Direct Test Send to Specific Target (e.g. @amin_moghadasi)
+  // Direct Test Send to Specific Target
   const handleTestSendTarget = async (target: string) => {
     try {
       const res = await fetch('/api/send-direct-test', {
@@ -319,6 +333,8 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) {
         alert(`خطای ارسال پیام تست: ${data.error || 'ناشناخته'}`);
+      } else {
+        alert(`✅ پیام تست با موفقیت به ${target} ارسال شد.`);
       }
       await fetchState();
     } catch (err: any) {
@@ -340,7 +356,7 @@ export default function App() {
       if (!res.ok) {
         alert(`خطای همگام‌سازی گروه‌ها: ${data.error || 'پاسخی از تلگرام دریافت نشد'}`);
       } else {
-        alert(`همگام‌سازی کامل گروه‌ها با حساب تلگرام انجام شد!\nتعداد گروه‌های جدید اضافه شده: ${data.addedCount || 0}\nتعداد گروه‌های به‌روزرسانی شده: ${data.updatedCount || 0}`);
+        alert(`همگام‌سازی کامل گروه‌ها انجام شد!\nتعداد گروه‌های جدید: ${data.addedCount || 0}\nتعداد گروه‌های به‌روزرسانی شده: ${data.updatedCount || 0}`);
       }
       await fetchState();
     } catch (err: any) {
@@ -461,15 +477,6 @@ export default function App() {
     await fetchState();
   };
 
-  const handleSendAnonymousPitchNow = async () => {
-    const res = await fetch('/api/anonymous/send-pitch-now', { method: 'POST' });
-    if (!res.ok) {
-      const data = await res.json();
-      alert(`خطا در ارسال پیشنهاد VPN: ${data.error || 'ارسال نشد'}`);
-    }
-    await fetchState();
-  };
-
   const [isSavingAllState, setIsSavingAllState] = useState(false);
   const [lastSavedTimestamp, setLastSavedTimestamp] = useState<string | null>(null);
 
@@ -500,20 +507,24 @@ export default function App() {
     }
   };
 
-  const [activeMainModule, setActiveMainModule] = useState<'anonymous_bot' | 'group_broadcast'>('anonymous_bot');
+  const isBroadcastingActive = isSendingNow || Boolean(appState.activeBroadcastProgress?.isRunning);
+  const activeGroupsCount = appState.groups.filter((g) => g.isActive).length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-sky-500 selection:text-slate-950" dir="rtl">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white" dir="rtl">
       
-      {/* Global Header Bar */}
+      {/* Global Header Bar with Segmented Module Tabs */}
       <Header
         credentials={appState.credentials}
+        accounts={appState.accounts || []}
+        activeAccountId={appState.activeAccountId}
         scheduler={appState.scheduler}
-        onToggleAutoRun={handleToggleAutoRun}
+        anonymousConfig={appState.anonymousAutomator}
+        activeNavTab={activeMainTab}
+        onNavTabChange={(tab) => setActiveMainTab(tab)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
-        onSendNow={handleSendNow}
+        onOpenAddAccount={() => setIsAddAccountModalOpen(true)}
         onLogout={handleLogout}
-        isSendingNow={isSendingNow}
         onSaveAll={handleSaveAll}
         isSavingAll={isSavingAllState}
         lastSavedTime={lastSavedTimestamp}
@@ -523,67 +534,17 @@ export default function App() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
-        {/* Module Switcher Tabs (Anonymous Bot Automation vs Group Broadcasts) */}
-        <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-xl flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveMainModule('anonymous_bot')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                activeMainModule === 'anonymous_bot'
-                  ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <Bot className="w-4 h-4" />
-              <span>اتوماسیون ربات‌های چت ناشناس & هوش مصنوعی ملودی (جدید 🌸)</span>
-              {appState.anonymousAutomator?.isActive && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveMainModule('group_broadcast')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                activeMainModule === 'group_broadcast'
-                  ? 'bg-sky-600 text-white shadow-lg shadow-sky-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <Megaphone className="w-4 h-4" />
-              <span>ارسال هوشمند و زمان‌بندی در گروه‌های تلگرام</span>
-              {appState.scheduler.isAutoRunActive && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              )}
-            </button>
-          </div>
-
-          <div className="px-3 py-1 text-[11px] text-slate-400 flex items-center gap-2">
-            <span>وضعیت حساب تلگرام:</span>
-            {appState.credentials.isConnected ? (
-              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
-                متصل ({appState.credentials.userProfile?.firstName || appState.credentials.phoneNumber})
-              </span>
-            ) : (
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
-                className="text-amber-400 hover:underline font-bold"
-              >
-                ورود به تلگرام (کلیک کنید)
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* ================================================================= */}
-        {/* MODULE 1: ANONYMOUS BOT AUTOMATION & AI CHAT */}
+        {/* MODULE 1: ANONYMOUS BOT AUTOMATION & AI CHAT (ملودی & چت ناشناس) */}
         {/* ================================================================= */}
-        {activeMainModule === 'anonymous_bot' && (
-          <div className="space-y-6">
+        {activeMainTab === 'anonymous_bot' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
             <AnonymousBotsCard
               config={appState.anonymousAutomator}
               activeSession={appState.activeAnonymousSession}
               history={appState.anonymousSessionHistory || []}
+              currentTestRun={appState.currentTestRun}
+              previousTestRuns={appState.previousTestRuns || []}
               isConnected={appState.credentials.isConnected}
               credentials={appState.credentials}
               accounts={appState.accounts || []}
@@ -600,86 +561,124 @@ export default function App() {
               onSendManualMessage={handleSendAnonymousManualMessage}
               onClearHistory={handleClearAnonymousHistory}
             />
-
-            {/* Live Terminal / Log Feed */}
-            <LogsConsole
-              logs={appState.logs}
-              onClearLogs={handleClearLogs}
-              onRefresh={fetchState}
-            />
           </div>
         )}
 
         {/* ================================================================= */}
-        {/* MODULE 2: GROUP BROADCASTS & ANTI-BOT ENGINE */}
+        {/* MODULE 2: GROUP BROADCASTS & ANTI-BOT ENGINE (ارسال به گروه‌ها) */}
         {/* ================================================================= */}
-        {activeMainModule === 'group_broadcast' && (
-          <div className="space-y-6">
-            {/* Quick Setup Wizard Steps Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-bold text-sm text-white flex items-center gap-2">
-                    راهنمای ۳ گام تا انتشار تبلیغات در تلگرام
+        {activeMainTab === 'group_broadcast' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            
+            {/* Top Dedicated Broadcast Hub Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/50 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                
+                {/* Left: Module Summary */}
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0">
+                    <Megaphone className="w-6 h-6" />
                   </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    برای شروع تبلیغ، گام‌های زیر را به ترتیب تکمیل کنید:
+                  <div>
+                    <h2 className="font-bold text-base text-white flex items-center gap-2">
+                      کنترل پنل ارسال تبلیغات به گروه‌های تلگرام
+                      {appState.scheduler.isAutoRunActive && (
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                          ارسال خودکار روشن است
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      ارسال هوشمند پست‌ها و بنرها با رعایت فاصله زمانی، جلوگیری از بلاک و تقسیم کار بین اکانت‌ها
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right: Broadcast Master Action Button Cluster */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  
+                  {/* Master Auto-Run Switch */}
+                  <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                    <span className="text-xs text-slate-300 font-medium px-2 flex items-center gap-1.5">
+                      <Power className={`w-3.5 h-3.5 ${appState.scheduler.isAutoRunActive ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
+                      زمان‌بندی خودکار:
+                    </span>
+                    <button
+                      onClick={() => handleToggleAutoRun(!appState.scheduler.isAutoRunActive)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        appState.scheduler.isAutoRunActive
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      <span>{appState.scheduler.isAutoRunActive ? 'فعال ✓' : 'غیرفعال'}</span>
+                    </button>
+                  </div>
+
+                  {/* Immediate Start / Stop Broadcast Button */}
+                  {isBroadcastingActive ? (
+                    <button
+                      onClick={handleStopBroadcast}
+                      disabled={isStoppingBroadcast}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold shadow-lg shadow-rose-600/30 transition-all active:scale-95 animate-pulse"
+                    >
+                      <StopCircle className="w-4 h-4" />
+                      <span>{isStoppingBroadcast ? 'در حال لغو...' : 'توقف فوری ارسال'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSendNow}
+                      disabled={!appState.credentials.isConnected || appState.groups.length === 0}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 ${
+                        appState.credentials.isConnected && appState.groups.length > 0
+                          ? 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white shadow-sky-500/25'
+                          : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                      }`}
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>شروع ارسال به گروه‌ها</span>
+                    </button>
+                  )}
+
+                </div>
+
+              </div>
+
+              {/* Status Metric Pills */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-center">
+                  <div className="text-[11px] text-slate-400">گروه‌های فعال برای ارسال</div>
+                  <div className="text-sm font-bold text-sky-400 mt-0.5">
+                    {activeGroupsCount.toLocaleString('fa-IR')} از {appState.groups.length.toLocaleString('fa-IR')}
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-center">
+                  <div className="text-[11px] text-slate-400">فاصله زمانی هر ارسال</div>
+                  <div className="text-sm font-bold text-white mt-0.5">
+                    هر {appState.scheduler.intervalMinutes} دقیقه
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-center">
+                  <div className="text-[11px] text-slate-400">کل ارسال‌های موفق</div>
+                  <div className="text-sm font-bold text-emerald-400 mt-0.5 font-mono">
+                    {appState.scheduler.totalSuccessCount.toLocaleString('fa-IR')}
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-center">
+                  <div className="text-[11px] text-slate-400">سقف ارسال ۲۴ ساعته</div>
+                  <div className="text-sm font-bold text-indigo-300 mt-0.5 font-mono">
+                    {(appState.scheduler.dailySentCount || 0).toLocaleString('fa-IR')} / {appState.scheduler.dailyLimit.toLocaleString('fa-IR')}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                {/* Step 1 */}
-                <button
-                  onClick={() => setIsAuthModalOpen(true)}
-                  className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition-colors ${
-                    appState.credentials.isConnected
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-sky-500'
-                  }`}
-                >
-                  <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold">۱</span>
-                  <span>وارد کردن api_id</span>
-                  {appState.credentials.isConnected && <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />}
-                </button>
-
-                {/* Step 2 */}
-                <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium ${
-                  appState.groups.length > 0
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-300'
-                }`}>
-                  <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold">۲</span>
-                  <span>افزودن گروه‌های هدف</span>
-                  <span className="text-[10px] text-sky-400 font-bold">({appState.groups.length})</span>
-                </div>
-
-                {/* Step 3 */}
-                <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium ${
-                  appState.campaigns.length > 0
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-300'
-                }`}>
-                  <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold">۳</span>
-                  <span>تنظیم محصول و عکس</span>
-                </div>
-              </div>
             </div>
 
-            {/* Real-Time Group Monitoring & Process Console */}
-            <MonitoringConsoleCard
-              reports={appState.monitoringReports || []}
-              onRefresh={fetchState}
-              onClear={handleClearMonitoringReports}
-              onMarkReviewed={handleMarkReviewed}
-              onRecheckAndSend={handleRecheckAndSend}
-            />
-
             {/* Live Parallel Multi-Account Broadcast Worker Monitor */}
-            {(appState.activeBroadcastProgress?.isRunning || isSendingNow) && (
+            {isBroadcastingActive && (
               <div className="bg-gradient-to-br from-indigo-950/80 via-slate-900 to-sky-950/80 border border-indigo-500/40 rounded-2xl p-5 shadow-2xl space-y-4 animate-in fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20 pb-3">
                   <div className="flex items-center gap-2.5">
@@ -718,7 +717,7 @@ export default function App() {
                       disabled={isStoppingBroadcast}
                       className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-600/30 transition-all flex items-center gap-1.5 active:scale-95 animate-pulse"
                     >
-                      <span>{isStoppingBroadcast ? 'در حال توقف...' : 'توقف فوری ارسال'}</span>
+                      <span>{isStoppingBroadcast ? 'در حال توقف...' : 'توقف فوری'}</span>
                     </button>
                   </div>
                 </div>
@@ -799,58 +798,18 @@ export default function App() {
               </div>
             )}
 
-            {/* Comprehensive Broadcast Execution Report */}
-            <BroadcastReportCard
-              lastReport={appState.lastBroadcastReport}
-              history={appState.broadcastHistory || []}
-            />
-
-            {/* Dashboard Grid Layout */}
+            {/* Main 2-Column Dashboard Grid Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
-              {/* Right/Top Primary Column: Product & Logs (7 cols) */}
+              {/* Left/Primary Column (7 cols): Campaign Post & Anti-Bot Engine */}
               <div className="lg:col-span-7 space-y-6">
                 
-                {/* Product Campaign Editor & Telegram Live Preview */}
+                {/* Product Campaign Editor & Live Telegram Preview */}
                 <CampaignCard
                   campaigns={appState.campaigns}
                   onSaveCampaign={handleSaveCampaign}
                   onDeleteCampaign={handleDeleteCampaign}
                   onToggleCampaign={handleToggleCampaign}
-                />
-
-                {/* Live Terminal & Log Feed */}
-                <LogsConsole
-                  logs={appState.logs}
-                  onClearLogs={handleClearLogs}
-                  onRefresh={fetchState}
-                />
-
-              </div>
-
-              {/* Left/Bottom Secondary Column: Target Groups, Multi-Account, AntiBot & Scheduler (5 cols) */}
-              <div className="lg:col-span-5 space-y-6">
-                
-                {/* Multi-Account Manager for Round-Robin Dispatch */}
-                <AccountManagerCard
-                  accounts={appState.accounts || []}
-                  activeAccountId={appState.activeAccountId}
-                  onSelectActiveAccount={handleSelectActiveAccount}
-                  onToggleAccountActive={handleToggleAccountActive}
-                  onDeleteAccount={handleDeleteAccount}
-                  onReauthAccount={(acc) => {
-                    setIsAuthModalOpen(true);
-                  }}
-                  onOpenAddAccountModal={() => setIsAddAccountModalOpen(true)}
-                />
-
-                {/* Scheduler & Anti-Spam Safeguards */}
-                <SchedulerCard
-                  scheduler={appState.scheduler}
-                  onUpdateScheduler={handleUpdateScheduler}
-                  onSendNow={handleSendNow}
-                  onStopBroadcast={handleStopBroadcast}
-                  isSendingNow={isSendingNow || Boolean(appState.activeBroadcastProgress?.isRunning)}
                 />
 
                 {/* Smart Anti-Bot & Lock Bypass Engine */}
@@ -859,6 +818,11 @@ export default function App() {
                   onSaveAntiBotSettings={handleSaveAntiBotSettings}
                 />
 
+              </div>
+
+              {/* Right Column (5 cols): Target Groups & Scheduler */}
+              <div className="lg:col-span-5 space-y-6">
+                
                 {/* Target Groups Manager */}
                 <TargetGroupsCard
                   groups={appState.groups}
@@ -873,9 +837,68 @@ export default function App() {
                   onSyncGroups={handleSyncGroups}
                 />
 
+                {/* Scheduler & Anti-Spam Safeguards */}
+                <SchedulerCard
+                  scheduler={appState.scheduler}
+                  onUpdateScheduler={handleUpdateScheduler}
+                  onSendNow={handleSendNow}
+                  onStopBroadcast={handleStopBroadcast}
+                  isSendingNow={isBroadcastingActive}
+                />
+
               </div>
 
             </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODULE 3: MULTI-ACCOUNT MANAGEMENT (مدیریت اکانت‌ها) */}
+        {/* ================================================================= */}
+        {activeMainTab === 'accounts' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <AccountManagerCard
+              accounts={appState.accounts || []}
+              activeAccountId={appState.activeAccountId}
+              onSelectActiveAccount={handleSelectActiveAccount}
+              onToggleAccountActive={handleToggleAccountActive}
+              onDeleteAccount={handleDeleteAccount}
+              onReauthAccount={(acc) => {
+                setIsAuthModalOpen(true);
+              }}
+              onOpenAddAccountModal={() => setIsAddAccountModalOpen(true)}
+            />
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODULE 4: MONITORING, REPORTS & LIVE LOGS (کنسول و گزارشات) */}
+        {/* ================================================================= */}
+        {activeMainTab === 'logs' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            
+            {/* Real-Time Group Barrier Monitoring & Process Console */}
+            <MonitoringConsoleCard
+              reports={appState.monitoringReports || []}
+              onRefresh={fetchState}
+              onClear={handleClearMonitoringReports}
+              onMarkReviewed={handleMarkReviewed}
+              onRecheckAndSend={handleRecheckAndSend}
+            />
+
+            {/* Comprehensive Broadcast Execution Report */}
+            <BroadcastReportCard
+              lastReport={appState.lastBroadcastReport}
+              history={appState.broadcastHistory || []}
+            />
+
+            {/* Live Terminal / Log Feed */}
+            <LogsConsole
+              logs={appState.logs}
+              onClearLogs={handleClearLogs}
+              onRefresh={fetchState}
+            />
+
           </div>
         )}
 

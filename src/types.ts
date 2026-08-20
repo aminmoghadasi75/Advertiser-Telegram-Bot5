@@ -214,6 +214,13 @@ export interface AnonymousBotProfile {
   customIgnoredKeywords?: string[]; // عبارات و پیام‌های سیستمی خاص ربات برای نادیده گرفتن
 }
 
+export interface ProductFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  keywords?: string[];
+}
+
 export interface AnonymousProductPromotion {
   enabled: boolean;
   productName: string; // عنوان محصول مثلاً «فیلترشکن اختصاصی پرسرعت»
@@ -222,15 +229,36 @@ export interface AnonymousProductPromotion {
   contactHandleOrLink?: string; // آیدی کانال یا پشتیبانی مثلاً @FastVpnSupport
   sendMode: 'ai_natural_mention' | 'send_photo_with_caption_before_exit' | 'send_custom_card_at_step'; 
   sendAtMessageNumber?: number; // پیام شماره چند (پیش‌فرض پیام آخر یا ۲)
+  aiSendBannerWithPitch?: boolean; // ارسال خودکار عکس بنر همراه با معرفی متنی توسط هوش مصنوعی
+  minPhotoDelaySeconds?: number; // حداقل زمان مکالمه قبل از مجاز بودن ارسال عکس (پیش‌فرض ۱۲۰ ثانیه / ۲ دقیقه)
+  faqItems?: ProductFaqItem[]; // سوالات و پاسخ‌های متداول محصول برای پاسخ‌دهی هوشمند
+  knowledgeBaseText?: string; // پایگاه دانش و توضیحات آزاد قیمت‌ها، پلن‌ها و گارانتی
 }
 
 export interface AnonymousChatInstructions {
   systemPrompt: string; // دستورالعمل متنی کامل هوش مصنوعی برای نحوه صحبت با کاربر ناشناس
   maxMessagesPerChat: number; // تعداد پیامی که بات باید با کاربر صحبت کند قبل از خروج (مثلاً ۳ یا ۵)
+  autoExitOnPartnerBye?: boolean; // تشخیص هوشمند خداحافظی یا قصد خروج مخاطب و اجرای بلافاصله فرآیند خروج با ارسال بنر تبلیغاتی
   memoryWindowSize?: number; // تعداد پیام‌های اخیر مکالمه جاری که در حافظه هوش مصنوعی نگهداری می‌شود (پیش‌فرض: ۱۰ پیام)
   enforceSessionIsolation?: boolean; // تضمین تفکیک کامل حافظه بین جلسات و فراموشی خودکار افراد قبلی
   extractPartnerProfileInfo?: boolean; // استخراج خودکار سن، جنسیت، شهر یا تگ کاربری از پیام ورود ربات و تزریق به حافظه
   dynamicSessionStatePrompt?: boolean; // تزریق هوشمند نوبت مکالمه و فاز گفتگو به پرامپت هوش مصنوعی
+  
+  // ۱. ارسال پیام‌های چندتکه‌ای (Multi-bubble Messaging)
+  enableMultiBubble?: boolean; // شکستن خودکار پاسخ‌های چندجمله‌ای به ۲ الی ۳ حباب پیام مجزا
+  multiBubbleMaxChunks?: number; // حداکثر تعداد حباب پیام متوالی (پیش‌فرض: ۲ تا ۳)
+  multiBubbleDelaySeconds?: number; // تاخیر بین حباب‌های متوالی (ثانیه، پیش‌فرض: ۱ الی ۲)
+
+  // ۲. سرعت تایپ پویا و هوشمند (Dynamic Typing Speed)
+  dynamicTypingSpeed?: boolean; // محاسبه زمان تایپ بر اساس تعداد حروف پیام به جای تاخیر ثابت
+  typingSpeedMsPerChar?: number; // مدت زمان تایپ به ازای هر کاراکتر (میلی‌ثانیه، مثلاً ۳۵ میلی‌ثانیه)
+  minTypingDelaySeconds?: number; // حداقل زمان تایپ (پیش‌فرض: ۱.۰ ثانیه)
+  maxTypingDelaySeconds?: number; // حداکثر زمان تایپ (پیش‌فرض: ۶.۰ ثانیه)
+
+  // ۳. فیلتر سریع ربات‌های تبلیغاتی و اسپم (Spam / Bot Skip)
+  autoSkipSpamBots?: boolean; // تشخیص فوری ربات‌ها و پیام‌های تبلیغاتی هم‌صحبت و خروج سریع
+  spamBotKeywords?: string[]; // عبارات شناسایی ربات و تبلیغات (لینک، آیدی کانال، عضویت، ربات و...)
+
   initiateGreetingOnConnect?: boolean; // ارسال خودکار پیام سلام/شروع به محض اتصال موفق به مخاطب ناشناس
   initialGreetingText?: string; // متن پیام شروع اولیه مثلاً «سلام خوبی؟ 🌸» یا «سلام چطوری؟»
   initialGreetings?: string[]; // لیست چندگانه متن‌های سلام برای ارسال تصادفی و چرخش پیام‌های شروع
@@ -272,15 +300,39 @@ export interface AnonymousChatSession {
   partnerProfileSnippet?: string; // مشخصات استخراج شده هم‌صحبت (مثلاً «پسر ۲۲ ساله از تهران»)
   status: 'idle' | 'navigating_buttons' | 'waiting_for_stranger' | 'chatting' | 'exiting_chat' | 'ended' | 'failed';
   statusMessage?: string;
-  exitReason?: 'max_messages_reached' | 'stranger_silence' | 'stranger_disconnected' | 'inappropriate_content' | 'manual_operator_skip' | 'bot_timeout';
+  exitReason?: 'max_messages_reached' | 'stranger_silence' | 'stranger_disconnected' | 'inappropriate_content' | 'manual_operator_skip' | 'bot_timeout' | 'partner_bye_exit' | 'spam_bot_skipped';
   startedAt: string;
   connectedAt?: string;
   endedAt?: string;
+  durationSeconds?: number;
   messagesCount: number;
   strangerMessagesCount: number;
   aiMessagesCount: number;
   promoSent?: boolean; // مشخص‌کننده اینکه آیا بنر و متن تبلیغاتی کمپین در این چت ارسال شده است یا خیر
+  inquiryDetected?: boolean; // آیا مخاطب به تبلیغ علاقه نشان داد یا سوال پرسید؟
+  inquirySnippet?: string; // خلاصه سوال یا درخواست هم‌صحبت پس از دیدن تبلیغ
+  isSpamBot?: boolean; // هم‌صحبت به عنوان ربات/اسپمر شناخته شد
   transcript: AnonymousChatMessage[];
+}
+
+export interface AnonymousAnalyticsReport {
+  totalChatsInitiated: number;
+  totalCompletedChats: number;
+  totalPromoSent: number;
+  totalInquiriesAfterPromo: number;
+  totalSpamBotsSkipped: number;
+  conversionRatePercent: number;
+  promoPitchRatePercent: number;
+  averageChatDurationSeconds: number;
+  averageMessagesPerChat: number;
+  exitReasonsBreakdown: Record<string, number>;
+  topInquiries: Array<{
+    sessionId: string;
+    partnerTag?: string;
+    partnerSnippet?: string;
+    inquiryText: string;
+    timestamp: string;
+  }>;
 }
 
 export interface AnonymousChatAutomatorConfig {
@@ -293,9 +345,78 @@ export interface AnonymousChatAutomatorConfig {
   currentRunStartedAt?: string; // زمان آغاز دور جاری اتوماسیون چت
   stats: {
     totalChatsInitiated: number;
+    totalCompletedChats?: number;
     totalRepliesFromStrangers: number;
+    totalPromoSent?: number;
+    totalInquiriesAfterPromo?: number;
+    totalSpamBotsSkipped?: number;
     lastActiveAt?: string;
+    exitReasonsBreakdown?: Record<string, number>;
   };
+}
+
+export interface AnonymousDialogueTurn {
+  sender: 'partner' | 'ai_bot' | 'operator_manual';
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+}
+
+export interface AnonymousPartnerConversation {
+  partnerNumber: number;
+  sessionId: string;
+  partnerTag?: string; // شناسه یا تگ کاربر مثلاً /user_abc
+  partnerProfile?: string; // سن، جنسیت، شهر استخراج شده
+  startedAt: string;
+  endedAt?: string;
+  exitReason?: string;
+  messagesCount: {
+    partner: number;
+    aiBot: number;
+  };
+  dialogue: AnonymousDialogueTurn[];
+}
+
+export interface AnonymousPromptTestRun {
+  id: string;
+  runIndex: number;
+  startedAt: string;
+  endedAt?: string;
+  status: 'running' | 'stopped';
+  botProfile: {
+    id: string;
+    name: string;
+    botUsername: string;
+  };
+  aiInstructionsAndContext: {
+    systemPrompt: string;
+    maxMessagesPerChat: number;
+    memoryWindowSize: number;
+    initialGreeting?: {
+      enabled: boolean;
+      text?: string;
+      mode?: string;
+    };
+    preExitFarewell?: {
+      enabled: boolean;
+      text?: string;
+    };
+    productPromotion?: {
+      enabled: boolean;
+      productName: string;
+      productDescription: string;
+      contactHandleOrLink?: string;
+      sendMode: string;
+    };
+    inappropriateKeywords?: string[];
+  };
+  analyticsSummary: {
+    totalPartnersChatted: number;
+    totalPartnerMessagesReceived: number;
+    totalAiRepliesSent: number;
+    averageTurnsPerPartner: number;
+  };
+  conversationsByPartner: AnonymousPartnerConversation[];
 }
 
 export interface AppState {
@@ -313,5 +434,7 @@ export interface AppState {
   anonymousAutomator?: AnonymousChatAutomatorConfig;
   activeAnonymousSession?: AnonymousChatSession;
   anonymousSessionHistory?: AnonymousChatSession[];
+  currentTestRun?: AnonymousPromptTestRun | null;
+  previousTestRuns?: AnonymousPromptTestRun[];
 }
 
