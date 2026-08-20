@@ -12,23 +12,42 @@ import {
   MessageCircle,
   LogOut,
   Sparkles,
+  Download,
+  FileText,
+  FileCode,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  History,
+  Info,
 } from 'lucide-react';
 
 interface AnonymousLiveMonitorTabProps {
   activeSession?: AnonymousChatSession;
   config?: AnonymousChatAutomatorConfig;
+  history?: AnonymousChatSession[];
   onNextStranger: () => Promise<void>;
   onSendManualMessage: (text: string) => Promise<void>;
+  onClearHistory?: () => Promise<void>;
 }
 
 export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = ({
   activeSession,
   config,
+  history = [],
   onNextStranger,
   onSendManualMessage,
+  onClearHistory,
 }) => {
   const [manualText, setManualText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
+  const [copiedAll, setCopiedAll] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const handleSendManual = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,15 +102,83 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
     }
   };
 
+  // Combine active session and history sessions for inspection
+  const allRecordedSessions: AnonymousChatSession[] = [];
+  if (activeSession && activeSession.transcript && activeSession.transcript.length > 0) {
+    allRecordedSessions.push(activeSession);
+  }
+  history.forEach((h) => {
+    if (!allRecordedSessions.some((s) => s.id === h.id)) {
+      allRecordedSessions.push(h);
+    }
+  });
+
+  const handleDownloadJson = async () => {
+    setIsDownloading(true);
+    try {
+      const url = `/api/anonymous/export-history`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute(
+        'download',
+        `chat_conversations_${new Date().toISOString().slice(0, 10)}.json`
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Download error:', err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleCopySingleSession = async (session: AnonymousChatSession) => {
+    const messages = (session.transcript || []).filter(
+      (m) => m.sender === 'stranger' || m.sender === 'me_melody' || m.sender === 'operator_manual'
+    );
+    const lines = messages.map((m) => {
+      const isBot = m.sender === 'me_melody' || m.sender === 'operator_manual';
+      const senderName = isBot ? 'ربات' : 'ناشناس';
+      return `${senderName}: ${m.text.trim()}`;
+    });
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopiedSessionId(session.id);
+      setTimeout(() => setCopiedSessionId(null), 2000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleClearAllHistory = async () => {
+    if (!confirm('آیا از پاکسازی تمامی تاریخچه مکالمات ضبط‌شده اطمینان دارید؟')) return;
+    setIsClearing(true);
+    try {
+      if (onClearHistory) {
+        await onClearHistory();
+      } else {
+        await fetch('/api/anonymous/clear-history', { method: 'POST' });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const maxMessages = config?.instructions?.maxMessagesPerChat || 4;
   const currentMessages = activeSession?.aiMessagesCount || 0;
 
   return (
-    <div className="p-5 space-y-5" dir="rtl">
-      {/* Session State Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+    <div className="p-4 sm:p-5 space-y-5" dir="rtl">
+      {/* ========================================================================= */}
+      {/* 1. SESSION STATE HEADER */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-800 shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shadow-inner">
             <Zap className="w-5 h-5" />
           </div>
           <div>
@@ -102,6 +189,7 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
             <p className="text-xs text-slate-400 mt-1">
               ربات: <strong className="text-violet-300">{activeSession?.botName || 'هایپرگپ'}</strong>
               {activeSession?.startedAt && ` • شروع: ${new Date(activeSession.startedAt).toLocaleTimeString('fa-IR')}`}
+              {activeSession?.sessionIndex && ` • جلسه #${activeSession.sessionIndex}`}
               {activeSession?.status === 'chatting' && (
                 <span className="text-emerald-400 font-bold mr-2">
                   (پیام {currentMessages} از {maxMessages})
@@ -116,7 +204,7 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
           <button
             type="button"
             onClick={onNextStranger}
-            className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold flex items-center gap-1.5 transition-all"
+            className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow"
           >
             <SkipForward className="w-4 h-4" />
             <span>خروج و اتصال به نفر بعدی</span>
@@ -124,8 +212,51 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
         </div>
       </div>
 
-      {/* Live Chat Window */}
-      <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-4 h-[400px] overflow-y-auto space-y-3 flex flex-col justify-between">
+      {/* ========================================================================= */}
+      {/* 2. DEDICATED CONVERSATION & INSTRUCTIONS JSON EXPORT */}
+      {/* ========================================================================= */}
+      <div className="bg-gradient-to-r from-violet-950/40 via-slate-900 to-indigo-950/40 p-4 rounded-2xl border border-violet-500/30 shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/20 text-violet-300 flex items-center justify-center font-bold border border-violet-500/30">
+              <Download className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-xs sm:text-sm text-white">
+                  دانلود داده‌های ساختاریافته مکالمات و دستورالعمل‌ها (JSON)
+                </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                  {allRecordedSessions.length} مکالمه ثبت‌شده
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                شامل متن دقیق پیام‌های رد و بدل شده (sender, text, timestamp) و کلیه دستورالعمل‌های فعال بات
+              </p>
+            </div>
+          </div>
+
+          {/* Only 1 Single Download Button */}
+          <div className="flex items-center gap-2">
+            <button
+              id="download-anon-json-btn"
+              type="button"
+              onClick={handleDownloadJson}
+              disabled={isDownloading || allRecordedSessions.length === 0}
+              className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-md active:scale-95"
+              title="دانلود فایل ساختاریافته JSON شامل دستورالعمل‌ها و پیام‌های مخاطب و ربات"
+            >
+              <Download className="w-4 h-4" />
+              <span>دانلود فایل JSON مکالمات</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. LIVE CHAT WINDOW */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-4 h-[380px] overflow-y-auto space-y-3 flex flex-col justify-between shadow-inner">
         {activeSession && activeSession.transcript && activeSession.transcript.length > 0 ? (
           <div className="space-y-3 overflow-y-auto pr-1">
             {activeSession.transcript.map((msg, idx) => {
@@ -151,7 +282,7 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
                   <div
                     className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                       isMe
-                        ? 'bg-violet-600/30 text-violet-300 border border-violet-500/40'
+                        ? 'bg-violet-600/30 text-violet-300 border border-violet-500/40 shadow'
                         : 'bg-slate-800 text-slate-300 border border-slate-700'
                     }`}
                   >
@@ -211,6 +342,236 @@ export const AnonymousLiveMonitorTab: React.FC<AnonymousLiveMonitorTabProps> = (
           <span>ارسال دستی</span>
         </button>
       </form>
+
+      {/* ========================================================================= */}
+      {/* 4. RECORDED SESSION HISTORY & IN-DEPTH TRANSCRIPT VIEWER */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
+              <History className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-bold text-xs sm:text-sm text-white">
+                🗂 آرشیو و مشروح مکالمات انجام‌شده ({allRecordedSessions.length} جلسه)
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                مشاهده مستقیم متن صحبت‌ها، بررسی عملکرد پرامپت و کپی یا دانلود دیالوگ‌های هر مکالمه
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {allRecordedSessions.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllHistory}
+                disabled={isClearing}
+                className="px-3 py-1.5 rounded-xl bg-rose-600/10 hover:bg-rose-600/20 text-rose-300 border border-rose-500/20 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                title="پاک کردن تمامی تاریخچه مکالمات ذخیره شده"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>پاکسازی آرشیو</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {allRecordedSessions.length === 0 ? (
+          <div className="p-6 text-center text-slate-500 space-y-1 bg-slate-900/40 rounded-xl border border-slate-800/60">
+            <Info className="w-6 h-6 mx-auto opacity-40 mb-2 text-slate-400" />
+            <div className="text-xs text-slate-300 font-medium">هیچ تاریخچه‌ای هنوز ضبط نشده است.</div>
+            <div className="text-[11px] text-slate-500">
+              با شروع اتوماسیون، دیالوگ‌های رد و بدل شده با هر هم‌صحبت در اینجا ثبت و ذخیره می‌شوند.
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+            {allRecordedSessions.map((session, idx) => {
+              const isExpanded = expandedSessionId === session.id;
+              const isCopied = copiedSessionId === session.id;
+              const sessionIndexNum = session.sessionIndex || allRecordedSessions.length - idx;
+              const isActiveNow = activeSession?.id === session.id && activeSession?.status === 'chatting';
+
+              return (
+                <div
+                  key={session.id || idx}
+                  className={`rounded-xl border transition-all ${
+                    isActiveNow
+                      ? 'bg-slate-900/90 border-emerald-500/50 shadow-md ring-1 ring-emerald-500/20'
+                      : isExpanded
+                      ? 'bg-slate-900/90 border-violet-500/40'
+                      : 'bg-slate-900/50 hover:bg-slate-900/80 border-slate-800/80'
+                  }`}
+                >
+                  {/* Session Summary Header */}
+                  <div
+                    onClick={() => setExpandedSessionId(isExpanded ? null : session.id)}
+                    className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-violet-600/30 text-violet-300 border border-violet-500/30 font-mono">
+                        #{sessionIndexNum}
+                      </span>
+
+                      {isActiveNow && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          مکالمه جاری
+                        </span>
+                      )}
+
+                      <span className="text-xs font-bold text-white">
+                        {session.partnerProfileSnippet || 'کاربر ناشناس'}
+                      </span>
+
+                      {session.partnerTag && (
+                        <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                          {session.partnerTag}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+                      <span>
+                        💬{' '}
+                        <strong className="text-violet-300 font-mono">
+                          {session.aiMessagesCount || 0}
+                        </strong>{' '}
+                        پاسخ بات |{' '}
+                        <strong className="text-sky-300 font-mono">
+                          {session.strangerMessagesCount || 0}
+                        </strong>{' '}
+                        پیام مخاطب
+                      </span>
+
+                      <span>
+                        ⏰{' '}
+                        {session.startedAt
+                          ? new Date(session.startedAt).toLocaleTimeString('fa-IR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}
+                      </span>
+
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-violet-400" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded Detailed Transcript */}
+                  {isExpanded && (
+                    <div className="px-3.5 pb-3.5 pt-1 border-t border-slate-800/80 space-y-3">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>
+                            علت خروج:{' '}
+                            <strong className="text-slate-200">
+                              {session.exitReason === 'max_messages_reached'
+                                ? 'اتمام سقف پیام‌ها'
+                                : session.exitReason === 'stranger_silence'
+                                ? 'سکوت مخاطب'
+                                : session.exitReason === 'stranger_disconnected'
+                                ? 'قطع اتصال توسط مخاطب'
+                                : session.exitReason === 'manual_operator_skip'
+                                ? 'رد کردن دستی'
+                                : 'خاتمه عادی'}
+                            </strong>
+                          </span>
+                          {session.promoSent && (
+                            <span className="text-fuchsia-300 bg-fuchsia-950/50 border border-fuchsia-800/40 px-1.5 py-0.5 rounded text-[10px]">
+                              🖼 تبلیغ ارسال شد
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopySingleSession(session);
+                          }}
+                          className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] flex items-center gap-1 font-medium transition-colors"
+                        >
+                          {isCopied ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span className="text-emerald-400">کپی شد</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 text-slate-400" />
+                              <span>کپی دیالوگ‌های این جلسه</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Message Bubbles */}
+                      <div className="space-y-2 bg-slate-950/80 p-3 rounded-xl border border-slate-800/80 max-h-60 overflow-y-auto">
+                        {!session.transcript || session.transcript.length === 0 ? (
+                          <div className="text-xs text-slate-500 text-center py-2">
+                            پیامی در این نشست تبادل نشد.
+                          </div>
+                        ) : (
+                          session.transcript.map((m, mIdx) => {
+                            const isMe = m.sender === 'me_melody' || m.sender === 'operator_manual';
+                            const isSys = m.sender === 'bot_system';
+
+                            if (isSys) {
+                              return (
+                                <div key={mIdx} className="text-center my-1">
+                                  <span className="text-[10px] text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                    {m.text}
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={mIdx}
+                                className={`flex items-start gap-2 ${
+                                  isMe ? 'flex-row' : 'flex-row-reverse'
+                                }`}
+                              >
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded font-bold mt-0.5 ${
+                                    isMe
+                                      ? 'bg-violet-600/30 text-violet-300'
+                                      : 'bg-slate-800 text-slate-300'
+                                  }`}
+                                >
+                                  {isMe ? 'بات' : 'مخاطب'}
+                                </span>
+                                <div
+                                  className={`p-2 rounded-xl text-xs max-w-[80%] whitespace-pre-wrap ${
+                                    isMe
+                                      ? 'bg-slate-900 text-white border border-slate-800'
+                                      : 'bg-slate-800 text-slate-200'
+                                  }`}
+                                >
+                                  {m.text}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
+

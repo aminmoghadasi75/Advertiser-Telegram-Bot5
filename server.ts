@@ -273,6 +273,10 @@ const defaultAnonymousAutomatorConfig: AnonymousChatAutomatorConfig = {
 ۴. هرگز نگو ربات هستی یا هوش مصنوعی؛ مثل یک آدم واقعی و پرانرژی صحبت کن.
 ۵. پیشوند «سارا:» یا علامت نقل‌قول در پاسخ نگذار و فقط خود پیام را ارسال کن.`,
     maxMessagesPerChat: 4,
+    memoryWindowSize: 10,
+    enforceSessionIsolation: true,
+    extractPartnerProfileInfo: true,
+    dynamicSessionStatePrompt: true,
     initiateGreetingOnConnect: true,
     initialGreetingText: 'سلام خوبی؟ 🌸',
     initialGreetings: ['سلام خوبی؟ 🌸', 'سلام چطوری؟', 'سلام روزت بخیر 🌸', 'سلام، خوبی؟ چه خبر؟'],
@@ -341,6 +345,10 @@ function normalizeAnonymousAutomatorConfig(incoming: any): AnonymousChatAutomato
   const mergedInstructions: AnonymousChatInstructions = {
     systemPrompt: typeof incInst.systemPrompt === 'string' ? incInst.systemPrompt : baseInst.systemPrompt,
     maxMessagesPerChat: typeof incInst.maxMessagesPerChat === 'number' ? incInst.maxMessagesPerChat : baseInst.maxMessagesPerChat,
+    memoryWindowSize: typeof incInst.memoryWindowSize === 'number' ? incInst.memoryWindowSize : (baseInst.memoryWindowSize || 10),
+    enforceSessionIsolation: incInst.enforceSessionIsolation !== undefined ? Boolean(incInst.enforceSessionIsolation) : (baseInst.enforceSessionIsolation ?? true),
+    extractPartnerProfileInfo: incInst.extractPartnerProfileInfo !== undefined ? Boolean(incInst.extractPartnerProfileInfo) : (baseInst.extractPartnerProfileInfo ?? true),
+    dynamicSessionStatePrompt: incInst.dynamicSessionStatePrompt !== undefined ? Boolean(incInst.dynamicSessionStatePrompt) : (baseInst.dynamicSessionStatePrompt ?? true),
     initiateGreetingOnConnect: incInst.initiateGreetingOnConnect !== undefined ? Boolean(incInst.initiateGreetingOnConnect) : baseInst.initiateGreetingOnConnect,
     initialGreetingText: typeof incInst.initialGreetingText === 'string' ? incInst.initialGreetingText : baseInst.initialGreetingText,
     initialGreetings: Array.isArray(incInst.initialGreetings) && incInst.initialGreetings.length > 0 ? incInst.initialGreetings : baseInst.initialGreetings,
@@ -1037,6 +1045,7 @@ async function ensureBotInGroup(client: any, peer: any, botToken: string): Promi
 
 // 1. Get complete state
 app.get('/api/state', (req, res) => {
+  appState.activeAnonymousSession = activeAnonChatSession || null;
   res.json(appState);
 });
 
@@ -3838,9 +3847,63 @@ function getAiClient(): GoogleGenAI | null {
   }
 }
 
+// Helper: Extract partner demographics (gender, age, city) or user tags from bot announcement text
+function extractPartnerMetadata(text: string): { partnerTag?: string; partnerSnippet?: string } {
+  if (!text) return {};
+  const clean = text.trim();
+  let partnerTag: string | undefined = undefined;
+  let partnerSnippet: string | undefined = undefined;
+
+  // 1. User Tag Match (e.g. /user_80Wazd, user_xxxx)
+  const userTagMatch = clean.match(/\/user_[a-zA-Z0-9_-]+/) || clean.match(/user_[a-zA-Z0-9_-]+/i);
+  if (userTagMatch) {
+    partnerTag = userTagMatch[0];
+  }
+
+  // 2. Demographic Elements (جنسیت: ... سن: ... استان: ...)
+  const parts: string[] = [];
+  const genderMatch = clean.match(/جنسیت\s*[:：]\s*([^\n,|،]+)/);
+  if (genderMatch && genderMatch[1]) {
+    parts.push(`جنسیت: ${genderMatch[1].trim()}`);
+  }
+  const ageMatch = clean.match(/سن\s*[:：]\s*([^\n,|،]+)/);
+  if (ageMatch && ageMatch[1]) {
+    parts.push(`سن: ${ageMatch[1].trim()}`);
+  }
+  const locationMatch = clean.match(/(استان|شهر|موقعیت|فاصله)\s*[:：]\s*([^\n,|،]+)/);
+  if (locationMatch && locationMatch[2]) {
+    parts.push(`${locationMatch[1]}: ${locationMatch[2].trim()}`);
+  }
+
+  if (parts.length > 0) {
+    partnerSnippet = parts.join('، ');
+  } else {
+    const partnerDescMatch = clean.match(/(هم‌صحبت|همصحبت|مخاطب|طرف مقابل|کاربر)\s*(شما)?\s*[:：]\s*([^\n]+)/);
+    if (partnerDescMatch && partnerDescMatch[3]) {
+      const desc = partnerDescMatch[3].trim();
+      if (desc.length < 60 && !desc.includes('خارج شد') && !desc.includes('بست')) {
+        partnerSnippet = desc;
+      }
+    }
+  }
+
+  return { partnerTag, partnerSnippet };
+}
+
+export interface AnonymousAiSessionContext {
+  sessionId?: string;
+  sessionIndex?: number;
+  partnerTag?: string;
+  partnerProfileSnippet?: string;
+  currentTurn?: number;
+  maxTurns?: number;
+  isNewSession?: boolean;
+}
+
 async function generateAnonymousAiReply(
   dialogueHistory: Array<{ sender: string; text: string }>,
-  instructions: AnonymousChatInstructions
+  instructions: AnonymousChatInstructions,
+  sessionContext?: AnonymousAiSessionContext
 ): Promise<{
   text: string;
   source: 'ai_gemini' | 'offline_fallback';
@@ -3854,7 +3917,7 @@ async function generateAnonymousAiReply(
       'gemini-flash-latest',
       'gemini-3.1-flash-lite',
     ];
-    let systemInstruction =
+    let basePrompt =
       instructions.systemPrompt ||
       `شما در نقش یک کاربر عادی ایرانی هستید که در یک ربات چت ناشناس تلگرام در حال صحبت با یک مخاطب ناشناس هستید.
 دستورالعمل‌ها:
@@ -3862,27 +3925,58 @@ async function generateAnonymousAiReply(
 ۲. لحن کاملاً صمیمی و خودمانی باشد. کلمات کتابی و رسمی ممنوع است.
 ۳. بدون پیشوند یا علامت نقل‌قول پاسخ دهید.`;
 
+    // Dynamic Session Framing & Complete Memory Isolation
+    const sessionFrameParts: string[] = [
+      `\n\n══════════════════════════════════════════════`,
+      `[چارچوب حافظه و تفکیک جلسه چت ناشناس]:`,
+      `- وضعیت: شما هم‌اکنون در حال چت با یک هم‌صحبت ناشناس کاملاً «جدید و مجزا» هستید.`,
+      `- قانون تفکیک و پاکسازی حافظه: تمام چت‌ها و افراد قبلی خاتمه یافته‌اند. این شخص هیچ اطلاعی از افراد یا مکالمات قبلی ندارد و شما به هیچ عنوان نباید از مکالمات گذشته یا افراد قبلی چیزی به یاد بیاورید یا بیان کنید.`,
+    ];
+
+    if (sessionContext?.partnerProfileSnippet && instructions.extractPartnerProfileInfo !== false) {
+      sessionFrameParts.push(`- مشخصات هم‌صحبت جاری: ${sessionContext.partnerProfileSnippet}`);
+    }
+    if (sessionContext?.partnerTag) {
+      sessionFrameParts.push(`- شناسه مخاطب جاری: ${sessionContext.partnerTag}`);
+    }
+    if (sessionContext?.currentTurn !== undefined && instructions.dynamicSessionStatePrompt !== false) {
+      const maxT = sessionContext.maxTurns || instructions.maxMessagesPerChat || 4;
+      const turnNum = sessionContext.currentTurn + 1;
+      sessionFrameParts.push(`- نوبت پیام: تبادل شماره ${turnNum} از سقف ${maxT} پیام این چت.`);
+      if (turnNum === 1) {
+        sessionFrameParts.push(`- فاز مکالمه: آغاز چت و آشنایی اولیه.`);
+      } else if (turnNum >= maxT) {
+        sessionFrameParts.push(`- فاز مکالمه: آخرین پیام‌های مکالمه قبل از خروج.`);
+      }
+    }
+    sessionFrameParts.push(`══════════════════════════════════════════════\n`);
+
+    let systemInstruction = basePrompt + sessionFrameParts.join('\n');
+
     if (instructions.productPromotion?.enabled) {
       const p = instructions.productPromotion;
       systemInstruction += `\n\nاطلاعات محصول/تبلیغ برای این چت:\n- نام محصول/خدمت: ${p.productName || 'ندارد'}\n- متن آفر و توضیحات: ${p.productDescription || 'ندارد'}\n- آیدی یا کانال ارتباطی: ${p.contactHandleOrLink || 'ندارد'}\n- استراتژی: اگر زمان مناسب بود یا مخاطب پرسید یا طبق دستورالعمل خواسته شده، این محصول را به صورت کاملاً خودمانی و طبیعی و غیررباتیک در مکالمه بیان کن.`;
     }
 
+    // Filter dialogue history strictly to current session's actual dialogue
     const cleanHistory = dialogueHistory.filter(
       (m) => m.sender === 'stranger' || m.sender === 'me_melody'
     );
-    const recentHistory = cleanHistory.slice(-10);
+    const windowSize = instructions.memoryWindowSize || 10;
+    const recentHistory = cleanHistory.slice(-windowSize);
 
     let chatPrompt = '';
     if (recentHistory.length > 0) {
       chatPrompt =
+        `[تاریخچه مکالمه فعال با این مخاطب ناشناس]:\n` +
         recentHistory
           .map((m) => {
             const speaker = m.sender === 'stranger' ? 'کاربر ناشناس' : 'من';
             return `${speaker}: ${m.text}`;
           })
-          .join('\n') + `\nمن:`;
+          .join('\n') + `\n\n[پاسخ جدید من با توجه به حرف‌های همین کاربر]:\nمن:`;
     } else {
-      chatPrompt = `کاربر ناشناس: ${lastStrangerMsg || 'سلام چطوری؟'}\nمن:`;
+      chatPrompt = `[مخاطب جدید متصل شد]\nکاربر ناشناس: ${lastStrangerMsg || 'سلام چطوری؟'}\nمن:`;
     }
 
     for (const modelName of candidateModels) {
@@ -5531,9 +5625,11 @@ async function runAnonymousChatWorker() {
       break;
     }
 
+    const sessionNum = (automator.stats.totalChatsInitiated || 0) + 1;
     const sessionId = 'anon_session_' + Date.now();
     activeAnonChatSession = {
       id: sessionId,
+      sessionIndex: sessionNum,
       botId: selectedBot.id,
       botUsername: selectedBot.botUsername,
       botName: selectedBot.name,
@@ -5541,7 +5637,7 @@ async function runAnonymousChatWorker() {
       accountPhone: appState.credentials.phoneNumber || '',
       accountName: appState.credentials.userProfile?.firstName || 'UserBot',
       status: 'navigating_buttons',
-      statusMessage: `در حال اتصال به ${selectedBot.name} و اجرای مراحل ورود...`,
+      statusMessage: `در حال اتصال به ${selectedBot.name} (جلسه چت #${sessionNum}) و اجرای مراحل ورود...`,
       startedAt: new Date().toISOString(),
       messagesCount: 0,
       strangerMessagesCount: 0,
@@ -5575,7 +5671,11 @@ async function runAnonymousChatWorker() {
       let isConnectedToPartner = false;
       const instructions = automator.instructions || {
         systemPrompt: 'شما در نقش یک کاربر عادی ایرانی هستید و کوتاه و صمیمی چت می‌کنید.',
-        maxMessagesPerChat: 3,
+        maxMessagesPerChat: 4,
+        memoryWindowSize: 10,
+        enforceSessionIsolation: true,
+        extractPartnerProfileInfo: true,
+        dynamicSessionStatePrompt: true,
         replyDelaySeconds: 1,
         silenceTimeoutSeconds: 30,
         enableSilenceNudge: true,
@@ -5631,6 +5731,9 @@ async function runAnonymousChatWorker() {
               (selectedBot.connectionKeywords || []).some((kw) => kw.trim() && isKeywordMatchInText(m.message, kw.trim()))
             ) {
               isConnectedToPartner = true;
+              const meta = extractPartnerMetadata(m.message);
+              if (meta.partnerTag) activeAnonChatSession.partnerTag = meta.partnerTag;
+              if (meta.partnerSnippet) activeAnonChatSession.partnerProfileSnippet = meta.partnerSnippet;
             }
           }
         }
@@ -5655,6 +5758,7 @@ async function runAnonymousChatWorker() {
         activeAnonChatSession.statusMessage = 'اتصال به مخاطب ناشناس برقرار شد! آماده گفتگو...';
         automator.stats.totalChatsInitiated = (automator.stats.totalChatsInitiated || 0) + 1;
         automator.stats.lastActiveAt = new Date().toISOString();
+        addLog('info', `[شروع جلسه #${activeAnonChatSession.sessionIndex || 1}] هم‌صحبت جدید متصل شد. حافظه مکالمات قبلی کاملاً پاکسازی شد.${activeAnonChatSession.partnerProfileSnippet ? ` مشخصات: ${activeAnonChatSession.partnerProfileSnippet}` : ''}`);
         saveData();
 
         // Send instant ice-breaker greeting if configured
@@ -5725,16 +5829,21 @@ async function runAnonymousChatWorker() {
                 lastAiReplyTime = Date.now();
                 silenceNudgeSent = false;
 
+                const meta = extractPartnerMetadata(msgText);
+                if (meta.partnerTag) activeAnonChatSession.partnerTag = meta.partnerTag;
+                if (meta.partnerSnippet) activeAnonChatSession.partnerProfileSnippet = meta.partnerSnippet;
+
                 activeAnonChatSession.status = 'chatting';
                 activeAnonChatSession.statusMessage = 'اتصال به مخاطب ناشناس تایید شد! در حال چت...';
                 activeAnonChatSession.transcript.push({
                   id: 'msg_' + Date.now(),
                   sender: 'bot_system',
-                  text: `✅ جمله اتصال ظاهر شد: «${msgText.slice(0, 60)}»`,
+                  text: `🟢 اتصال به هم‌صحبت جدید برقرار شد (جلسه #${activeAnonChatSession.sessionIndex || 1}${meta.partnerSnippet ? ` | مشخصات: ${meta.partnerSnippet}` : ''}) - حافظه مکالمه قبلی ریست شد.`,
                   timestamp: new Date().toISOString(),
                 });
                 automator.stats.totalChatsInitiated = (automator.stats.totalChatsInitiated || 0) + 1;
                 automator.stats.lastActiveAt = new Date().toISOString();
+                addLog('info', `[شروع جلسه #${activeAnonChatSession.sessionIndex || 1}] اتصال برقرار شد. حافظه مکالمات قبلی ریست شد.`);
                 saveData();
                 continue;
               }
@@ -5966,7 +6075,16 @@ async function runAnonymousChatWorker() {
 
           const replyResult = await generateAnonymousAiReply(
             activeAnonChatSession.transcript.map((t) => ({ sender: t.sender, text: t.text })),
-            instructions
+            instructions,
+            {
+              sessionId: activeAnonChatSession.id,
+              sessionIndex: activeAnonChatSession.sessionIndex,
+              partnerTag: activeAnonChatSession.partnerTag,
+              partnerProfileSnippet: activeAnonChatSession.partnerProfileSnippet,
+              currentTurn: activeAnonChatSession.aiMessagesCount || 0,
+              maxTurns: instructions.maxMessagesPerChat || 4,
+              isNewSession: (activeAnonChatSession.aiMessagesCount || 0) === 0,
+            }
           );
 
           const maxMsgs = instructions.maxMessagesPerChat || 3;
@@ -6131,9 +6249,14 @@ async function runAnonymousChatWorker() {
       if (activeAnonChatSession) {
         activeAnonChatSession.endedAt = new Date().toISOString();
         if (!appState.anonymousSessionHistory) appState.anonymousSessionHistory = [];
-        appState.anonymousSessionHistory.unshift(activeAnonChatSession);
-        if (appState.anonymousSessionHistory.length > 30) {
-          appState.anonymousSessionHistory = appState.anonymousSessionHistory.slice(0, 30);
+        const existingIdx = appState.anonymousSessionHistory.findIndex((s) => s.id === activeAnonChatSession?.id);
+        if (existingIdx >= 0) {
+          appState.anonymousSessionHistory[existingIdx] = { ...activeAnonChatSession };
+        } else {
+          appState.anonymousSessionHistory.unshift({ ...activeAnonChatSession });
+        }
+        if (appState.anonymousSessionHistory.length > 200) {
+          appState.anonymousSessionHistory = appState.anonymousSessionHistory.slice(0, 200);
         }
         saveData();
       }
@@ -6157,6 +6280,11 @@ async function runAnonymousChatWorker() {
       if (activeAnonChatSession) {
         activeAnonChatSession.status = 'failed';
         activeAnonChatSession.statusMessage = 'خطا: ' + (chatErr?.message || chatErr);
+        activeAnonChatSession.endedAt = new Date().toISOString();
+        if (!appState.anonymousSessionHistory) appState.anonymousSessionHistory = [];
+        if (!appState.anonymousSessionHistory.some((s) => s.id === activeAnonChatSession?.id)) {
+          appState.anonymousSessionHistory.unshift({ ...activeAnonChatSession });
+        }
         saveData();
       }
       await new Promise((r) => setTimeout(r, 5000));
@@ -6167,11 +6295,74 @@ async function runAnonymousChatWorker() {
   if (appState.anonymousAutomator) {
     appState.anonymousAutomator.isActive = false;
   }
-  if (activeAnonChatSession && activeAnonChatSession.status === 'chatting') {
-    activeAnonChatSession.status = 'ended';
+  if (activeAnonChatSession) {
+    if (activeAnonChatSession.status === 'chatting' || activeAnonChatSession.status === 'navigating_buttons') {
+      activeAnonChatSession.status = 'ended';
+      activeAnonChatSession.statusMessage = 'اتوماسیون متوقف گردید.';
+      activeAnonChatSession.endedAt = new Date().toISOString();
+    }
+    if (activeAnonChatSession.transcript && activeAnonChatSession.transcript.length > 0) {
+      if (!appState.anonymousSessionHistory) appState.anonymousSessionHistory = [];
+      const existingIdx = appState.anonymousSessionHistory.findIndex((s) => s.id === activeAnonChatSession?.id);
+      if (existingIdx >= 0) {
+        appState.anonymousSessionHistory[existingIdx] = { ...activeAnonChatSession };
+      } else {
+        appState.anonymousSessionHistory.unshift({ ...activeAnonChatSession });
+      }
+    }
   }
   saveData();
   console.log('🛑 Telegram Anonymous Chat Bot Automation Worker stopped.');
+}
+
+// Helper: Build Clean JSON Export Data (Instructions + pure conversation messages)
+function generateAnonymousChatJsonExport(
+  sessions: AnonymousChatSession[],
+  automator: AnonymousChatAutomatorConfig | undefined
+) {
+  const instructions = automator?.instructions || defaultAnonymousAutomatorConfig.instructions;
+
+  // Filter conversations and their messages (only stranger & bot messages)
+  const cleanConversations: any[] = [];
+
+  sessions.forEach((s, idx) => {
+    const rawTranscript = s.transcript || [];
+    const validMessages = rawTranscript
+      .filter(
+        (m) => m.sender === 'stranger' || m.sender === 'me_melody' || m.sender === 'operator_manual'
+      )
+      .map((m) => ({
+        sender: m.sender === 'stranger' ? 'stranger' : 'bot',
+        text: (m.text || '').trim(),
+        timestamp: m.timestamp || new Date().toISOString(),
+      }))
+      .filter((m) => m.text.length > 0);
+
+    if (validMessages.length > 0) {
+      cleanConversations.push({
+        conversationIndex: s.sessionIndex || (sessions.length - idx),
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        messages: validMessages,
+      });
+    }
+  });
+
+  return {
+    exportedAt: new Date().toISOString(),
+    instructions: {
+      systemPrompt: instructions.systemPrompt,
+      maxMessagesPerChat: instructions.maxMessagesPerChat,
+      memoryWindowSize: instructions.memoryWindowSize,
+      initiateGreetingOnConnect: instructions.initiateGreetingOnConnect,
+      initialGreetingText: instructions.initialGreetingText,
+      enablePreExitFarewell: instructions.enablePreExitFarewell,
+      preExitFarewellText: instructions.preExitFarewellText,
+      inappropriateKeywords: instructions.inappropriateKeywords || [],
+      productPromotion: instructions.productPromotion,
+    },
+    conversations: cleanConversations,
+  };
 }
 
 // ============================================================================
@@ -6184,6 +6375,39 @@ app.get('/api/anonymous/state', (req, res) => {
     activeSession: activeAnonChatSession || appState.activeAnonymousSession || null,
     history: appState.anonymousSessionHistory || [],
   });
+});
+
+app.get('/api/anonymous/export-history', (req, res) => {
+  try {
+    const automator = appState.anonymousAutomator;
+    const history = appState.anonymousSessionHistory || [];
+
+    // Also include active session if currently in progress
+    const allSessions = [...history];
+    if (activeAnonChatSession && !allSessions.some((s) => s.id === activeAnonChatSession?.id)) {
+      allSessions.unshift({ ...activeAnonChatSession });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const exportData = generateAnonymousChatJsonExport(allSessions, automator);
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="chat_conversations_${timestamp}.json"`
+    );
+    res.send(JSON.stringify(exportData, null, 2));
+  } catch (err: any) {
+    console.error('Failed to export anonymous history:', err);
+    res.status(500).json({ error: 'خطا در تولید فایل خروجی JSON مکالمات: ' + (err.message || err) });
+  }
+});
+
+app.post('/api/anonymous/clear-history', (req, res) => {
+  appState.anonymousSessionHistory = [];
+  saveData();
+  addLog('info', '[چت ناشناس] تاریخچه تمامی مکالمات ضبط‌شده قبلی پاکسازی گردید.');
+  res.json({ success: true, message: 'تاریخچه مکالمات با موفقیت پاکسازی شد.', history: [] });
 });
 
 app.post('/api/anonymous/update-config', (req, res) => {
@@ -6247,6 +6471,7 @@ app.post('/api/anonymous/start', async (req, res) => {
     appState.anonymousAutomator.selectedBotId = botId;
   }
   appState.anonymousAutomator.isActive = true;
+  appState.anonymousAutomator.currentRunStartedAt = new Date().toISOString();
   saveData();
 
   // Launch background worker
@@ -6335,7 +6560,7 @@ app.post('/api/anonymous/send-manual-message', async (req, res) => {
 });
 
 app.post('/api/anonymous/test-ai-simulation', async (req, res) => {
-  const { history, instructions } = req.body;
+  const { history, instructions, sessionContext } = req.body;
   try {
     const activeInstructions: AnonymousChatInstructions =
       instructions ||
@@ -6344,7 +6569,8 @@ app.post('/api/anonymous/test-ai-simulation', async (req, res) => {
 
     const replyResult = await generateAnonymousAiReply(
       history || [],
-      activeInstructions
+      activeInstructions,
+      sessionContext
     );
     res.json({
       reply: replyResult.text,

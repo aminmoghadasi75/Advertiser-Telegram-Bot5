@@ -456,6 +456,11 @@ export default function App() {
     await fetchState();
   };
 
+  const handleClearAnonymousHistory = async () => {
+    await fetch('/api/anonymous/clear-history', { method: 'POST' });
+    await fetchState();
+  };
+
   const handleSendAnonymousPitchNow = async () => {
     const res = await fetch('/api/anonymous/send-pitch-now', { method: 'POST' });
     if (!res.ok) {
@@ -578,6 +583,7 @@ export default function App() {
             <AnonymousBotsCard
               config={appState.anonymousAutomator}
               activeSession={appState.activeAnonymousSession}
+              history={appState.anonymousSessionHistory || []}
               isConnected={appState.credentials.isConnected}
               credentials={appState.credentials}
               accounts={appState.accounts || []}
@@ -592,6 +598,7 @@ export default function App() {
               onStopAutomator={handleStopAnonymousAutomator}
               onNextStranger={handleNextAnonymousStranger}
               onSendManualMessage={handleSendAnonymousManualMessage}
+              onClearHistory={handleClearAnonymousHistory}
             />
 
             {/* Live Terminal / Log Feed */}

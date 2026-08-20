@@ -227,6 +227,10 @@ export interface AnonymousProductPromotion {
 export interface AnonymousChatInstructions {
   systemPrompt: string; // دستورالعمل متنی کامل هوش مصنوعی برای نحوه صحبت با کاربر ناشناس
   maxMessagesPerChat: number; // تعداد پیامی که بات باید با کاربر صحبت کند قبل از خروج (مثلاً ۳ یا ۵)
+  memoryWindowSize?: number; // تعداد پیام‌های اخیر مکالمه جاری که در حافظه هوش مصنوعی نگهداری می‌شود (پیش‌فرض: ۱۰ پیام)
+  enforceSessionIsolation?: boolean; // تضمین تفکیک کامل حافظه بین جلسات و فراموشی خودکار افراد قبلی
+  extractPartnerProfileInfo?: boolean; // استخراج خودکار سن، جنسیت، شهر یا تگ کاربری از پیام ورود ربات و تزریق به حافظه
+  dynamicSessionStatePrompt?: boolean; // تزریق هوشمند نوبت مکالمه و فاز گفتگو به پرامپت هوش مصنوعی
   initiateGreetingOnConnect?: boolean; // ارسال خودکار پیام سلام/شروع به محض اتصال موفق به مخاطب ناشناس
   initialGreetingText?: string; // متن پیام شروع اولیه مثلاً «سلام خوبی؟ 🌸» یا «سلام چطوری؟»
   initialGreetings?: string[]; // لیست چندگانه متن‌های سلام برای ارسال تصادفی و چرخش پیام‌های شروع
@@ -257,6 +261,7 @@ export interface AnonymousChatMessage {
 
 export interface AnonymousChatSession {
   id: string;
+  sessionIndex?: number; // شماره ترتیب مکالمه در چرخه
   botId: string;
   botUsername: string;
   botName: string;
@@ -264,6 +269,7 @@ export interface AnonymousChatSession {
   accountPhone: string;
   accountName?: string;
   partnerTag?: string; // شناسه یا تگ هم‌صحبت جاری (مثلاً /user_80Wazd)
+  partnerProfileSnippet?: string; // مشخصات استخراج شده هم‌صحبت (مثلاً «پسر ۲۲ ساله از تهران»)
   status: 'idle' | 'navigating_buttons' | 'waiting_for_stranger' | 'chatting' | 'exiting_chat' | 'ended' | 'failed';
   statusMessage?: string;
   exitReason?: 'max_messages_reached' | 'stranger_silence' | 'stranger_disconnected' | 'inappropriate_content' | 'manual_operator_skip' | 'bot_timeout';
@@ -284,6 +290,7 @@ export interface AnonymousChatAutomatorConfig {
   instructions: AnonymousChatInstructions;
   loopForever: boolean; // تکرار مداوم و رفتن خودکار به هم‌صحبت بعدی بعد از خروج
   cooldownBetweenChatsSeconds: number; // استراحت کوتاه بین چت‌ها (ثانیه)
+  currentRunStartedAt?: string; // زمان آغاز دور جاری اتوماسیون چت
   stats: {
     totalChatsInitiated: number;
     totalRepliesFromStrangers: number;

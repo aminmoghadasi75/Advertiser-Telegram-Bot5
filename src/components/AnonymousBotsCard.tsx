@@ -26,11 +26,14 @@ import {
   CheckCircle2,
   Phone,
   ChevronDown,
+  Download,
+  FileText,
 } from 'lucide-react';
 
 interface AnonymousBotsCardProps {
   config?: AnonymousChatAutomatorConfig;
   activeSession?: AnonymousChatSession;
+  history?: AnonymousChatSession[];
   isConnected: boolean;
   credentials?: TelegramCredentials;
   accounts?: TelegramAccount[];
@@ -45,11 +48,13 @@ interface AnonymousBotsCardProps {
   onStopAutomator: () => Promise<void>;
   onNextStranger: () => Promise<void>;
   onSendManualMessage: (text: string) => Promise<void>;
+  onClearHistory?: () => Promise<void>;
 }
 
 export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   config,
   activeSession,
+  history = [],
   isConnected,
   credentials,
   accounts = [],
@@ -64,9 +69,31 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   onStopAutomator,
   onNextStranger,
   onSendManualMessage,
+  onClearHistory,
 }) => {
   const [activeTab, setActiveTab] = useState<'bots' | 'instructions' | 'simulator' | 'live_chat'>('bots');
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleQuickDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const url = `/api/anonymous/export-history`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute(
+        'download',
+        `chat_conversations_${new Date().toISOString().slice(0, 10)}.json`
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Quick download error:', err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const rawInstructions = config?.instructions;
   const instructions: AnonymousChatInstructions = {
@@ -256,17 +283,32 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
           </div>
         </div>
 
-        <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center">
-          <div className="text-[11px] text-slate-400">کل مکالمات انجام‌شده</div>
-          <div className="text-sm font-bold text-white mt-0.5">
-            {config?.stats?.totalChatsInitiated || 0} <span className="text-[10px] text-slate-400 font-normal">نفر</span>
+        <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-between">
+          <div>
+            <div className="text-[11px] text-slate-400">کل مکالمات ضبط‌شده</div>
+            <div className="text-sm font-bold text-white mt-0.5">
+              {history.length || config?.stats?.totalChatsInitiated || 0} <span className="text-[10px] text-slate-400 font-normal">جلسه</span>
+            </div>
           </div>
+          {history.length > 0 && (
+            <button
+              type="button"
+              onClick={handleQuickDownload}
+              disabled={isDownloading}
+              className="mt-1.5 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+            >
+              <Download className="w-3 h-3" />
+              <span>دانلود JSON مکالمات</span>
+            </button>
+          )}
         </div>
 
-        <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center">
-          <div className="text-[11px] text-slate-400">پاسخ‌های دریافتی از ناشناس</div>
-          <div className="text-sm font-bold text-violet-400 mt-0.5">
-            {config?.stats?.totalRepliesFromStrangers || 0} <span className="text-[10px] text-slate-400 font-normal">پیام</span>
+        <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-center flex flex-col justify-center">
+          <div>
+            <div className="text-[11px] text-slate-400">پاسخ‌های دریافتی از ناشناس</div>
+            <div className="text-sm font-bold text-violet-400 mt-0.5">
+              {config?.stats?.totalRepliesFromStrangers || 0} <span className="text-[10px] text-slate-400 font-normal">پیام</span>
+            </div>
           </div>
         </div>
       </div>
@@ -322,7 +364,7 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
           }`}
         >
           <Zap className="w-4 h-4" />
-          <span>۴. مانیتور زنده تلگرام</span>
+          <span>۴. مانیتور زنده و آرشیو ({history.length})</span>
           {activeSession && activeSession.status === 'chatting' && (
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-0.5 right-2" />
           )}
@@ -355,8 +397,10 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
           <AnonymousLiveMonitorTab
             activeSession={activeSession}
             config={config}
+            history={history}
             onNextStranger={onNextStranger}
             onSendManualMessage={onSendManualMessage}
+            onClearHistory={onClearHistory}
           />
         )}
       </div>

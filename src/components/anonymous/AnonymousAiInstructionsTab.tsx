@@ -1210,6 +1210,139 @@ export const AnonymousAiInstructionsTab: React.FC<AnonymousAiInstructionsTabProp
         </div>
       </div>
 
+      {/* ========================================================================= */}
+      {/* 4. AI CONVERSATION MEMORY & SESSION ISOLATION (حافظه و تفکیک جلسات) */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/60 p-4 sm:p-5 rounded-2xl border border-cyan-500/30 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs border border-cyan-500/30 shadow">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-white">🧠 حافظه هوشمند و تفکیک کامل جلسات مکالمه</h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-medium">
+                  جدید و بهینه‌سازی شده
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                تضمین یادآوری پیوسته حرف‌های مخاطب جاری + ریست و فراموشی کامل افراد قبلی در هر اتصال جدید
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-2 border-t border-slate-800/80">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {/* Control 1: Strict Session Isolation */}
+            <div className="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                  تفکیک تضمینی جلسات (Session Isolation)
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localInstructions.enforceSessionIsolation ?? true}
+                    onChange={(e) => updateField('enforceSessionIsolation', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                با روشن بودن این گزینه، به محض قطع شدن یک مکالمه و شروع چت با فرد جدید، تمام حافظه قبلی ریست شده و هوش مصنوعی می‌داند با یک شخص کاملاً جدید در حال گفتگو است.
+              </p>
+            </div>
+
+            {/* Control 2: Extract Partner Demographics */}
+            <div className="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  استخراج خودکار مشخصات مخاطب (سن، جنسیت، شهر)
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localInstructions.extractPartnerProfileInfo ?? true}
+                    onChange={(e) => updateField('extractPartnerProfileInfo', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                اگر ربات در پیام شروع مشخصاتی مانند «پسر ۲۲ ساله تهران» یا تگ کاربر را اعلام کند، هوش مصنوعی آن را استخراج و در حافظه این مکالمه لحاظ می‌کند.
+              </p>
+            </div>
+
+            {/* Control 3: Dynamic Session Phase Context */}
+            <div className="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-violet-400"></span>
+                  تزریق هوشمند فاز مکالمه به هوش مصنوعی
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localInstructions.dynamicSessionStatePrompt ?? true}
+                    onChange={(e) => updateField('dynamicSessionStatePrompt', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                هوش مصنوعی در هر نوبت پاسخ، می‌داند که پیام شماره چندم از سقف چت است (مثلاً پیام شروع آشنایی است یا پیام قبل از خداحافظی و خروج).
+              </p>
+            </div>
+
+            {/* Control 4: Memory Window Size Slider */}
+            <div className="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  عمق حافظه مکالمه جاری (Memory Window):
+                </span>
+                <span className="text-cyan-400 font-bold font-mono text-xs">
+                  {localInstructions.memoryWindowSize ?? 10} پیام اخیر
+                </span>
+              </div>
+              <div className="pt-1">
+                <input
+                  type="range"
+                  min="4"
+                  max="20"
+                  step="2"
+                  value={localInstructions.memoryWindowSize ?? 10}
+                  onChange={(e) => updateField('memoryWindowSize', parseInt(e.target.value) || 10)}
+                  className="w-full accent-cyan-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                تعداد پیام‌های رد و بدل شده اخیر با همان هم‌صحبت که هوش مصنوعی در پاسخ‌های بعدی به خاطر دارد.
+              </p>
+            </div>
+          </div>
+
+          {/* Memory Feature Highlight Banner */}
+          <div className="p-3 bg-cyan-950/30 border border-cyan-700/40 rounded-xl flex items-start gap-2.5 text-xs text-cyan-200">
+            <Check className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1 leading-relaxed">
+              <span className="font-bold text-white">نحوه کارکرد سیستم حافظه و تفکیک مکالمات:</span>
+              <p className="text-[11px] text-cyan-300">
+                ۱. در طول یک چت، هوش مصنوعی کل تاریخچه گفتگوی همان فرد را به صورت پیوسته در نظر می‌گیرد تا پاسخ‌ها مرتبط و منطقی باشند.<br />
+                ۲. به محض شناسایی پیام قطع اتصال یا رسیدن به سقف پیام و خروج، شناسه جلسه و تاریخچه آن بایگانی شده و جلسه بعدی با حافظه کاملاً خالی و صفر شروع می‌شود.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Dialogue Rules & Exit Limits */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Max Messages Limit */}
