@@ -18,7 +18,31 @@ import {
   AnonymousChatMessage,
   AnonymousBotButtonStep,
   AnonymousProductPromotion,
+  TelegramAccount,
 } from './src/types.js';
+
+// Telegram Phone Number Cleaner & Normalizer
+function cleanPhoneNumber(phone: string): string {
+  if (!phone) return '';
+  let res = String(phone)
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+    .replace(/[\s\-\(\)]/g, '')
+    .trim();
+  if (res.startsWith('00')) {
+    res = '+' + res.slice(2);
+  } else if (res.startsWith('09')) {
+    res = '+98' + res.slice(1);
+  } else if (res.startsWith('98')) {
+    res = '+' + res;
+  } else if (!res.startsWith('+') && /^\d+$/.test(res)) {
+    res = '+' + res;
+  }
+  return res;
+}
+
+const DEFAULT_API_ID = '2040';
+const DEFAULT_API_HASH = 'b18441a1ff607e10a989891a5462e627';
 
 // GramJS import for Telegram MTProto
 let TelegramClient: any = null;
@@ -510,9 +534,9 @@ if (fs.existsSync(DATA_FILE)) {
       anonymousSessionHistory: Array.isArray(parsed.anonymousSessionHistory) ? parsed.anonymousSessionHistory : [],
     };
     saveData();
-    if (!appState.credentials.apiId) {
-      appState.credentials.apiId = '22239448';
-      appState.credentials.apiHash = '18f904bed04337c78b82e6faf8575259';
+    if (!appState.credentials.apiId || appState.credentials.apiId === '22239448') {
+      appState.credentials.apiId = DEFAULT_API_ID;
+      appState.credentials.apiHash = DEFAULT_API_HASH;
     }
     console.log('✅ Loaded saved app state from telegram_promoter_data.json. Telegram Connected:', appState.credentials.isConnected);
   } catch (e) {
@@ -636,14 +660,20 @@ async function getOrInitTgClient() {
     return null;
   }
   try {
-    const apiId = parseInt(appState.credentials.apiId, 10);
-    const apiHash = appState.credentials.apiHash;
+    const apiId = parseInt(appState.credentials.apiId || DEFAULT_API_ID, 10);
+    const apiHash = appState.credentials.apiHash || DEFAULT_API_HASH;
     const stringSession = new StringSession(appState.credentials.sessionString);
     
     const client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 2,
+      connectionRetries: 3,
       useWSS: false,
-      timeout: 12000,
+      timeout: 25000,
+      autoReconnect: true,
+      deviceModel: 'Desktop',
+      systemVersion: 'Windows 10',
+      appVersion: '4.16.8',
+      langCode: 'en',
+      systemLangCode: 'en',
     });
     
     await client.connect();
@@ -707,14 +737,20 @@ async function getOrInitClientForAccount(account: any) {
   if (!TelegramClient || !StringSession) return null;
 
   try {
-    const apiId = parseInt(account.apiId || appState.credentials.apiId || '22239448', 10);
-    const apiHash = account.apiHash || appState.credentials.apiHash || '18f904bed04337c78b82e6faf8575259';
+    const apiId = parseInt(account.apiId || appState.credentials.apiId || DEFAULT_API_ID, 10);
+    const apiHash = account.apiHash || appState.credentials.apiHash || DEFAULT_API_HASH;
     const stringSession = new StringSession(account.sessionString);
 
     const client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 2,
+      connectionRetries: 3,
       useWSS: false,
-      timeout: 12000,
+      timeout: 25000,
+      autoReconnect: true,
+      deviceModel: 'Desktop',
+      systemVersion: 'Windows 10',
+      appVersion: '4.16.8',
+      langCode: 'en',
+      systemLangCode: 'en',
     });
 
     await client.connect();
@@ -1121,12 +1157,21 @@ app.post('/api/credentials/send-code', async (req, res) => {
     return;
   }
 
-  const cleanPhone = String(phoneNumber).trim();
+  const cleanPhone = cleanPhoneNumber(phoneNumber);
+  if (!cleanPhone || cleanPhone.length < 8) {
+    res.status(400).json({ error: 'شماره تلفن وارد شده نامعتبر است. فرمت صحیح: 989123456789+' });
+    return;
+  }
+
   appState.credentials.phoneNumber = cleanPhone;
+  if (!appState.credentials.apiId) {
+    appState.credentials.apiId = DEFAULT_API_ID;
+    appState.credentials.apiHash = DEFAULT_API_HASH;
+  }
   saveData();
 
-  const apiIdNum = parseInt(appState.credentials.apiId, 10);
-  const apiHash = appState.credentials.apiHash;
+  const apiIdNum = parseInt(appState.credentials.apiId || DEFAULT_API_ID, 10);
+  const apiHash = appState.credentials.apiHash || DEFAULT_API_HASH;
 
   if (!apiIdNum || !apiHash) {
     res.status(400).json({ error: 'ابتدا API ID و API Hash را ذخیره کنید' });
@@ -1135,45 +1180,53 @@ app.post('/api/credentials/send-code', async (req, res) => {
 
   try {
     await loadGramJS();
-    if (TelegramClient && StringSession) {
-      const stringSession = new StringSession('');
-      const client = new TelegramClient(stringSession, apiIdNum, apiHash, {
-        connectionRetries: 3,
-        useWSS: false,
-      });
-      
-      await client.connect();
-      const sendCodeResult = await client.sendCode(
-        {
-          apiId: apiIdNum,
-          apiHash,
-          onError: (err: any) => { throw err; }
-        },
-        cleanPhone
-      );
-
-      appState.credentials.phoneCodeHash = sendCodeResult.phoneCodeHash;
-      appState.credentials.sessionString = client.session.save() as unknown as string;
-      activeTgClient = client;
-      
-      saveData();
-      addLog('info', `کد تایید تلگرام به شماره ${cleanPhone} ارسال گردید.`);
-      res.json({ success: true, message: 'کد تایید تلگرام به حساب تلگرام شما ارسال شد.' });
+    if (!TelegramClient || !StringSession) {
+      res.status(500).json({ error: 'کتابخانه تلگرام بارگذاری نشد.' });
       return;
     }
+
+    const stringSession = new StringSession('');
+    const client = new TelegramClient(stringSession, apiIdNum, apiHash, {
+      connectionRetries: 3,
+      useWSS: false,
+      timeout: 25000,
+      autoReconnect: true,
+      deviceModel: 'Desktop',
+      systemVersion: 'Windows 10',
+      appVersion: '4.16.8',
+      langCode: 'en',
+      systemLangCode: 'en',
+    });
+    
+    // Connect with 20s timeout
+    await Promise.race([
+      client.connect(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 20000))
+    ]);
+
+    const sendCodeResult = await client.sendCode(
+      {
+        apiId: apiIdNum,
+        apiHash,
+      },
+      cleanPhone
+    );
+
+    appState.credentials.phoneCodeHash = sendCodeResult.phoneCodeHash;
+    appState.credentials.sessionString = client.session.save() as unknown as string;
+    activeTgClient = client;
+    
+    saveData();
+    addLog('info', `کد تایید تلگرام به شماره ${cleanPhone} ارسال گردید.`);
+    res.json({ success: true, message: 'کد تایید تلگرام به حساب تلگرام شما ارسال شد.' });
+    return;
   } catch (err: any) {
     console.error('Telegram sendCode error:', err);
-    const msg = String(err.errorMessage || err.message || err);
-    let userErr = 'خطا در ارسال کد تلگرام: ' + msg;
-    if (msg.includes('PHONE_NUMBER_INVALID')) userErr = 'شماره تلفن وارد شده نامعتبر است. فرمت صحیح: 989123456789+';
-    if (msg.includes('API_ID_INVALID')) userErr = 'API ID یا API Hash وارد شده اشتباه است.';
-    if (msg.includes('FLOOD_WAIT')) userErr = `تلاش مکرر! تلگرام شما را محدود کرده است. چند دقیقه دیگر مجدداً کد بگیرید (${msg}).`;
-    
-    res.status(400).json({ error: userErr });
+    const friendlyError = translateTgError(err);
+    addLog('error', `خطا در ارسال کد تلگرام: ${friendlyError}`);
+    res.status(400).json({ error: friendlyError });
     return;
   }
-
-  res.status(500).json({ error: 'سیستم تلگرام در دسترس نیست.' });
 });
 
 // 4. Verify Code & Complete Telegram Sign In
@@ -1244,19 +1297,56 @@ app.post('/api/credentials/verify-code', async (req, res) => {
     const me = await client.getMe();
     const savedSession = client.session.save() as unknown as string;
 
-    appState.credentials.sessionString = savedSession;
-    appState.credentials.isConnected = true;
-    appState.credentials.userProfile = {
+    const userProfile = {
       id: String(me.id),
       firstName: me.firstName || 'کاربر تلگرام',
       lastName: me.lastName || '',
       username: me.username || '',
-      phone: me.phone || phoneNumber,
+      phone: me.phone ? (me.phone.startsWith('+') ? me.phone : '+' + me.phone) : phoneNumber,
     };
 
+    appState.credentials.sessionString = savedSession;
+    appState.credentials.isConnected = true;
+    appState.credentials.userProfile = userProfile;
+    appState.credentials.phoneNumber = userProfile.phone;
+
+    // Register or update in persistent accounts list
+    if (!appState.accounts || !Array.isArray(appState.accounts)) {
+      appState.accounts = [];
+    }
+
+    const cleanNum = userProfile.phone;
+    const existingIndex = appState.accounts.findIndex(
+      (a) => a.phoneNumber === cleanNum || a.sessionString === savedSession
+    );
+
+    if (existingIndex >= 0) {
+      appState.accounts[existingIndex].sessionString = savedSession;
+      appState.accounts[existingIndex].userProfile = userProfile;
+      appState.accounts[existingIndex].apiId = apiId;
+      appState.accounts[existingIndex].apiHash = apiHash;
+      appState.accounts[existingIndex].status = 'active';
+      appState.accounts[existingIndex].isActive = true;
+      appState.activeAccountId = appState.accounts[existingIndex].id;
+    } else {
+      const newAcc: TelegramAccount = {
+        id: 'acc_' + Date.now(),
+        phoneNumber: cleanNum,
+        apiId,
+        apiHash,
+        sessionString: savedSession,
+        userProfile,
+        isActive: true,
+        dailySentCount: 0,
+        status: 'active',
+      };
+      appState.accounts.push(newAcc);
+      appState.activeAccountId = newAcc.id;
+    }
+
     saveData();
-    addLog('success', `ورود موفقیت‌آمیز به حساب تلگرام (@${me.username || me.firstName}) انجام شد.`);
-    res.json({ success: true, credentials: appState.credentials });
+    addLog('success', `ورود موفقیت‌آمیز به حساب تلگرام (@${me.username || me.firstName}) انجام شد و حساب در حافظه دائمی ذخیره گردید.`);
+    res.json({ success: true, credentials: appState.credentials, accounts: appState.accounts, activeAccountId: appState.activeAccountId });
     return;
   } catch (err: any) {
     console.error('Verify code Telegram error:', err);
@@ -1746,6 +1836,34 @@ function translateTgError(err: any): string {
       return `محدودیت استعلام آیدی (Flood Wait). حساب تلگرام شما به مدت ${hours} ساعت (${mins} دقیقه) از استعلام آیدی‌های جدید محدود شده است. ارسال‌ها به طور خودکار با ربات انجام می‌شود.`;
     }
     return `محدودیت ارسال تلگرام (Flood Wait). لطفاً ${hours} ساعت (${mins} دقیقه) صبوری کنید.`;
+  }
+
+  if (msg.includes('API_ID_INVALID') || msg.includes('API_ID_PUBLISHED_FLOOD')) {
+    return 'شناسه API ID یا کلید API Hash تلگرام نامعتبر یا منقضی است. لطفاً کلیدها را بررسی کنید یا از پیش‌تنظیم استاندارد تلگرام دسکتاپ استفاده فرمایید.';
+  }
+  if (msg.includes('TIMEOUT') || msg.includes('ETIMEDOUT') || msg.includes('ECONNRESET') || msg.includes('EHOSTUNREACH')) {
+    return 'خطای وقفه در ارتباط با سرورهای تلگرام (Timeout). لطفاً ارتباط اینترنت خود را بررسی کرده و چند ثانیه بعد مجدداً تلاش فرمایید.';
+  }
+  if (msg.includes('PHONE_NUMBER_INVALID')) {
+    return 'شماره تلفن وارد شده نامعتبر است. فرمت صحیح با کد کشور: 989123456789+';
+  }
+  if (msg.includes('PHONE_NUMBER_BANNED')) {
+    return 'این شماره تلفن توسط تلگرام مسدود (Ban) شده است و امکان ارسال کد ندارد.';
+  }
+  if (msg.includes('PHONE_CODE_EXPIRED')) {
+    return 'کد تایید ۵ رقمی تلگرام منقضی شده است. لطفاً مجدداً درخواست کد تایید ارسال نمایید.';
+  }
+  if (msg.includes('PHONE_CODE_INVALID')) {
+    return 'کد تایید وارد شده نادرست است. لطفاً کد ۵ رقمی دریافتی از تلگرام را به دقت وارد کنید.';
+  }
+  if (msg.includes('PASSWORD_HASH_INVALID')) {
+    return 'رمز عبور تایید دو مرحله‌ای (2FA) نادرست است.';
+  }
+  if (msg.includes('SESSION_PASSWORD_NEEDED')) {
+    return 'تایید دو مرحله‌ای (2FA) فعال است. لطفاً رمز عبور را وارد نمایید.';
+  }
+  if (msg.includes('SEND_CODE_UNAVAILABLE')) {
+    return 'امکان ارسال کد به این شماره در حال حاضر مقدور نیست. لطفاً دقایقی دیگر تلاش فرمایید.';
   }
 
   if (
@@ -3451,7 +3569,7 @@ app.get('/api/accounts/list', (req, res) => {
   });
 });
 
-app.post('/api/accounts/select-active', (req, res) => {
+app.post('/api/accounts/select-active', async (req, res) => {
   const { accountId } = req.body;
   syncAccountsState();
   const acc = (appState.accounts || []).find(a => a.id === accountId);
@@ -3460,17 +3578,30 @@ app.post('/api/accounts/select-active', (req, res) => {
     return;
   }
 
+  // Disconnect existing client so new account connects cleanly
+  if (activeTgClient) {
+    try {
+      await activeTgClient.disconnect();
+    } catch (e) {}
+    activeTgClient = null;
+  }
+
   appState.activeAccountId = acc.id;
   appState.credentials.phoneNumber = acc.phoneNumber;
-  appState.credentials.apiId = acc.apiId || appState.credentials.apiId;
-  appState.credentials.apiHash = acc.apiHash || appState.credentials.apiHash;
+  appState.credentials.apiId = acc.apiId || DEFAULT_API_ID;
+  appState.credentials.apiHash = acc.apiHash || DEFAULT_API_HASH;
   appState.credentials.sessionString = acc.sessionString;
   appState.credentials.userProfile = acc.userProfile;
   appState.credentials.isConnected = true;
   saveData();
 
-  addLog('info', `[چرخش اکانت] اکانت فعال نرم‌افزار به (${acc.userProfile?.firstName || acc.phoneNumber}) تغییر یافت.`);
-  res.json({ success: true, accounts: appState.accounts, activeAccountId: appState.activeAccountId });
+  addLog('info', `[تغییر اکانت فعال] اکانت فعال نرم‌افزار با یک کلیک به (${acc.userProfile?.firstName || acc.phoneNumber}) تغییر یافت.`);
+  res.json({
+    success: true,
+    accounts: appState.accounts,
+    activeAccountId: appState.activeAccountId,
+    credentials: appState.credentials,
+  });
 });
 
 app.post('/api/accounts/toggle', (req, res) => {
@@ -3532,6 +3663,12 @@ app.post('/api/accounts/add-start', async (req, res) => {
     return;
   }
 
+  const cleanPhone = cleanPhoneNumber(phoneNumber);
+  if (!cleanPhone || cleanPhone.length < 8) {
+    res.status(400).json({ error: 'شماره تلفن وارد شده نامعتبر است. فرمت صحیح: 989123456789+' });
+    return;
+  }
+
   try {
     await loadGramJS();
     if (!TelegramClient || !StringSession) {
@@ -3539,26 +3676,36 @@ app.post('/api/accounts/add-start', async (req, res) => {
       return;
     }
 
-    const effectiveApiId = parseInt(apiId || appState.credentials.apiId || '22239448', 10);
-    const effectiveApiHash = apiHash || appState.credentials.apiHash || '18f904bed04337c78b82e6faf8575259';
+    const effectiveApiId = parseInt(apiId || appState.credentials.apiId || DEFAULT_API_ID, 10);
+    const effectiveApiHash = apiHash || appState.credentials.apiHash || DEFAULT_API_HASH;
 
     const tempSession = new StringSession('');
     const tempClient = new TelegramClient(tempSession, effectiveApiId, effectiveApiHash, {
       connectionRetries: 3,
       useWSS: false,
+      timeout: 25000,
+      autoReconnect: true,
+      deviceModel: 'Desktop',
+      systemVersion: 'Windows 10',
+      appVersion: '4.16.8',
+      langCode: 'en',
+      systemLangCode: 'en',
     });
 
-    await tempClient.connect();
+    await Promise.race([
+      tempClient.connect(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 20000))
+    ]);
 
     const { phoneCodeHash } = await tempClient.sendCode(
       { apiId: effectiveApiId, apiHash: effectiveApiHash },
-      phoneNumber
+      cleanPhone
     );
 
     const sessionId = 'acc_login_' + Date.now();
     multiAccLoginSessionsMap.set(sessionId, {
       sessionId,
-      phoneNumber,
+      phoneNumber: cleanPhone,
       phoneCodeHash,
       apiId: String(effectiveApiId),
       apiHash: effectiveApiHash,
@@ -3572,7 +3719,7 @@ app.post('/api/accounts/add-start', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Account add-start error:', err);
-    res.status(500).json({ error: translateTgError(err) });
+    res.status(400).json({ error: translateTgError(err) });
   }
 });
 

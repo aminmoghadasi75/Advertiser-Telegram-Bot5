@@ -579,6 +579,12 @@ export default function App() {
               config={appState.anonymousAutomator}
               activeSession={appState.activeAnonymousSession}
               isConnected={appState.credentials.isConnected}
+              credentials={appState.credentials}
+              accounts={appState.accounts || []}
+              activeAccountId={appState.activeAccountId}
+              onSelectActiveAccount={handleSelectActiveAccount}
+              onOpenAddAccountModal={() => setIsAddAccountModalOpen(true)}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
               onUpdateConfig={handleUpdateAnonymousConfig}
               onSaveBot={handleSaveAnonymousBot}
               onDeleteBot={handleDeleteAnonymousBot}
@@ -825,6 +831,9 @@ export default function App() {
                   onSelectActiveAccount={handleSelectActiveAccount}
                   onToggleAccountActive={handleToggleAccountActive}
                   onDeleteAccount={handleDeleteAccount}
+                  onReauthAccount={(acc) => {
+                    setIsAuthModalOpen(true);
+                  }}
                   onOpenAddAccountModal={() => setIsAddAccountModalOpen(true)}
                 />
 
@@ -870,6 +879,10 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         credentials={appState.credentials}
+        accounts={appState.accounts || []}
+        activeAccountId={appState.activeAccountId}
+        onSelectActiveAccount={handleSelectActiveAccount}
+        onDeleteAccount={handleDeleteAccount}
         onSaveCredentials={handleSaveCredentials}
         onSendCode={handleSendCode}
         onVerifyCode={handleVerifyCode}

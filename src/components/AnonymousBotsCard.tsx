@@ -4,6 +4,8 @@ import {
   AnonymousBotProfile,
   AnonymousChatInstructions,
   AnonymousChatSession,
+  TelegramAccount,
+  TelegramCredentials,
 } from '../types';
 import { AnonymousBotsListTab } from './anonymous/AnonymousBotsListTab';
 import { AnonymousAiInstructionsTab } from './anonymous/AnonymousAiInstructionsTab';
@@ -19,12 +21,23 @@ import {
   Repeat,
   Layers,
   Settings2,
+  UserCheck,
+  PlusCircle,
+  CheckCircle2,
+  Phone,
+  ChevronDown,
 } from 'lucide-react';
 
 interface AnonymousBotsCardProps {
   config?: AnonymousChatAutomatorConfig;
   activeSession?: AnonymousChatSession;
   isConnected: boolean;
+  credentials?: TelegramCredentials;
+  accounts?: TelegramAccount[];
+  activeAccountId?: string;
+  onSelectActiveAccount?: (accountId: string) => Promise<void>;
+  onOpenAddAccountModal?: () => void;
+  onOpenAuthModal?: () => void;
   onUpdateConfig: (config: Partial<AnonymousChatAutomatorConfig>) => Promise<void>;
   onSaveBot: (bot: AnonymousBotProfile) => Promise<void>;
   onDeleteBot: (botId: string) => Promise<void>;
@@ -38,6 +51,12 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   config,
   activeSession,
   isConnected,
+  credentials,
+  accounts = [],
+  activeAccountId,
+  onSelectActiveAccount,
+  onOpenAddAccountModal,
+  onOpenAuthModal,
   onUpdateConfig,
   onSaveBot,
   onDeleteBot,
@@ -47,6 +66,7 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   onSendManualMessage,
 }) => {
   const [activeTab, setActiveTab] = useState<'bots' | 'instructions' | 'simulator' | 'live_chat'>('bots');
+  const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
 
   const rawInstructions = config?.instructions;
   const instructions: AnonymousChatInstructions = {
@@ -90,8 +110,31 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
     },
   };
 
+  const handleAccountChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const accId = e.target.value;
+    if (!accId || !onSelectActiveAccount) return;
+    setIsSwitchingAccount(true);
+    try {
+      await onSelectActiveAccount(accId);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSwitchingAccount(false);
+    }
+  };
+
+  const currentAccountName =
+    credentials?.userProfile?.firstName ||
+    accounts.find((a) => a.id === activeAccountId)?.userProfile?.firstName ||
+    credentials?.phoneNumber ||
+    'اکانت نامشخص';
+
   return (
-    <div id="anonymous-bots-card" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl space-y-4" dir="rtl">
+    <div
+      id="anonymous-bots-card"
+      className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl space-y-4"
+      dir="rtl"
+    >
       {/* 1. Header Banner & Master Run Button */}
       <div className="p-5 border-b border-slate-800 bg-gradient-to-r from-violet-950/50 via-slate-900 to-fuchsia-950/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -137,6 +180,60 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
               <span>شروع چت با ناشناس‌ها</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Account Selector Bar (1-Click Account Switcher for Anonymous Chat) */}
+      <div className="mx-5 bg-slate-950/80 p-3.5 rounded-xl border border-violet-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center">
+            <UserCheck className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-400">حساب تلگرام فعال جهت اجرای چت ناشناس:</div>
+            <div className="text-xs font-bold text-white flex items-center gap-2">
+              <span>{currentAccountName}</span>
+              {isConnected ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  متصل
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  قطع اتصال
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {accounts.length > 1 && (
+            <div className="relative">
+              <select
+                aria-label="انتخاب اکانت فعال تلگرام"
+                value={activeAccountId || accounts[0]?.id || ''}
+                onChange={handleAccountChange}
+                disabled={isSwitchingAccount}
+                className="bg-slate-900 border border-slate-700 hover:border-violet-500 text-slate-200 text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none transition-colors cursor-pointer pl-8"
+              >
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.userProfile?.firstName || 'اکانت'} ({acc.phoneNumber})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onOpenAddAccountModal || onOpenAuthModal}
+            className="px-3 py-1.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>افزودن / مدیریت اکانت‌ها</span>
+          </button>
         </div>
       </div>
 
@@ -252,11 +349,7 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
           />
         )}
 
-        {activeTab === 'simulator' && (
-          <AnonymousSimulatorTab
-            instructions={instructions}
-          />
-        )}
+        {activeTab === 'simulator' && <AnonymousSimulatorTab instructions={instructions} />}
 
         {activeTab === 'live_chat' && (
           <AnonymousLiveMonitorTab

@@ -8,6 +8,7 @@ interface AccountManagerCardProps {
   onSelectActiveAccount: (id: string) => Promise<void>;
   onToggleAccountActive: (id: string, isActive: boolean) => Promise<void>;
   onDeleteAccount: (id: string) => Promise<void>;
+  onReauthAccount?: (acc: TelegramAccount) => void;
   onOpenAddAccountModal: () => void;
 }
 
@@ -17,6 +18,7 @@ export const AccountManagerCard: React.FC<AccountManagerCardProps> = ({
   onSelectActiveAccount,
   onToggleAccountActive,
   onDeleteAccount,
+  onReauthAccount,
   onOpenAddAccountModal,
 }) => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -207,22 +209,22 @@ export const AccountManagerCard: React.FC<AccountManagerCardProps> = ({
                 </div>
 
                 {/* Account Controls */}
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {!isPrimary && (
                       <button
                         onClick={() => handleSelectActive(acc.id)}
                         disabled={loadingId === acc.id}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium transition-all"
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium transition-all"
                       >
-                        انتخاب به عنوان اصلی
+                        اصلی
                       </button>
                     )}
 
                     <button
                       onClick={() => handleToggle(acc.id, acc.isActive)}
                       disabled={loadingId === acc.id}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border ${
+                      className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all border ${
                         acc.isActive
                           ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
                           : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
@@ -230,6 +232,17 @@ export const AccountManagerCard: React.FC<AccountManagerCardProps> = ({
                     >
                       {acc.isActive ? 'شرکت در ارسال: بله' : 'شرکت در ارسال: خیر'}
                     </button>
+
+                    {onReauthAccount && (
+                      <button
+                        onClick={() => onReauthAccount(acc)}
+                        className="px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-[11px] font-semibold transition-all flex items-center gap-1"
+                        title="تمدید نشست و درخواست کد ۵ رقمی جدید تلگرام"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>تمدید نشست</span>
+                      </button>
+                    )}
                   </div>
 
                   <button
