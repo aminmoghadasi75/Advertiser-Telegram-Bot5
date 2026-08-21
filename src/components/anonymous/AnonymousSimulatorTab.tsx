@@ -90,9 +90,9 @@ export const AnonymousSimulatorTab: React.FC<AnonymousSimulatorTabProps> = ({
           await new Promise((r) => setTimeout(r, (instructions.farewellDelaySeconds || 1.2) * 1000));
         }
 
-        let promoText = promo.productDescription || 'راستی این آفر ویژه رو ببین 🌸';
-        if (promo.contactHandleOrLink && !promoText.includes(promo.contactHandleOrLink)) {
-          promoText += `\n💬 ارتباط / کانال: ${promo.contactHandleOrLink}`;
+        let promoText = (promo.productDescription || 'راستی این پیشنهاد ویژه رو ببین 🌸').trim();
+        if (promo.contactHandleOrLink && !promo.contactHandleOrLink.includes('عکس') && !promoText.includes(promo.contactHandleOrLink)) {
+          promoText += `\n💬 ارتباط / کانال: ${promo.contactHandleOrLink.replace(/^@/, '')}`;
         }
         await new Promise((r) => setTimeout(r, (instructions.replyDelaySeconds || 1) * 1000));
         setMessages((prev) => [

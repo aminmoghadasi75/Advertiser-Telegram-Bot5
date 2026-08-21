@@ -3998,47 +3998,91 @@ export interface AnonymousAiSessionContext {
   isUnder2Minutes?: boolean;
 }
 
-// Helper: Convert English and Persian digits to written Persian words
+// Helper: Convert any number to fluent Persian words
+function convertNumberToPersianWords(num: number): string {
+  const yekan = ['', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'];
+  const dahgan = ['', 'ده', 'بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'];
+  const dahYek = ['ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده'];
+  const sadgan = ['', 'صد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'];
+
+  if (num === 0) return 'صفر';
+  if (num < 0) return 'منفی ' + convertNumberToPersianWords(-num);
+
+  const parts: string[] = [];
+
+  if (num >= 1000000) {
+    const million = Math.floor(num / 1000000);
+    parts.push(convertNumberToPersianWords(million) + ' میلیون');
+    num %= 1000000;
+  }
+
+  if (num >= 1000) {
+    const hezar = Math.floor(num / 1000);
+    if (hezar === 1) {
+      parts.push('هزار');
+    } else {
+      parts.push(convertNumberToPersianWords(hezar) + ' هزار');
+    }
+    num %= 1000;
+  }
+
+  if (num >= 100) {
+    const sad = Math.floor(num / 100);
+    parts.push(sadgan[sad]);
+    num %= 100;
+  }
+
+  if (num >= 20) {
+    const dah = Math.floor(num / 10);
+    parts.push(dahgan[dah]);
+    num %= 10;
+  } else if (num >= 10) {
+    parts.push(dahYek[num - 10]);
+    num = 0;
+  }
+
+  if (num > 0) {
+    parts.push(yekan[num]);
+  }
+
+  return parts.filter(Boolean).join(' و ');
+}
+
+// Helper: Convert English and Persian digits in text to written Persian words
 function convertDigitsToPersianWords(text: string): string {
   if (!text) return '';
-  const digitWords: Record<string, string> = {
-    '0': 'صفر', '1': 'یک', '2': 'دو', '3': 'سه', '4': 'چهار',
-    '5': 'پنج', '6': 'شش', '7': 'هفت', '8': 'هشت', '9': 'نه',
-    '۰': 'صفر', '۱': 'یک', '۲': 'دو', '۳': 'سه', '۴': 'چهار',
-    '۵': 'پنج', '۶': 'شش', '۷': 'هفت', '۸': 'هشت', '۹': 'نه',
-  };
-
-  const directMap: Record<number, string> = {
-    0: 'صفر', 1: 'یک', 2: 'دو', 3: 'سه', 4: 'چهار', 5: 'پنج', 6: 'شش', 7: 'هفت', 8: 'هشت', 9: 'نه', 10: 'ده',
-    11: 'یازده', 12: 'دوازده', 13: 'سیزده', 14: 'چهارده', 15: 'پانزده', 16: 'شانزده', 17: 'هفده', 18: 'هجده', 19: 'نوزده',
-    20: 'بیست', 21: 'بیست و یک', 22: 'بیست و دو', 23: 'بیست و سه', 24: 'بیست و چهار', 25: 'بیست و پنج',
-    26: 'بیست و شش', 27: 'بیست و هفت', 28: 'بیست و هشت', 29: 'بیست و نه', 30: 'سی', 31: 'سی و یک', 32: 'سی و دو',
-    35: 'سی و پنج', 40: 'چهل', 50: 'پنجاه', 59: 'پنجاه و نه', 60: 'شصت', 70: 'هفتاد', 80: 'هشتاد', 89: 'هشتاد و نه', 90: 'نود', 100: 'صد'
-  };
-
   return text.replace(/[\d۰-۹]+/g, (match) => {
-    const standardized = match.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
+    const standardized = match.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
     const num = parseInt(standardized, 10);
-    if (!isNaN(num) && directMap[num]) {
-      return directMap[num];
+    if (!isNaN(num) && num >= 0 && num <= 999999999) {
+      return convertNumberToPersianWords(num);
     }
-    return match.split('').map(d => digitWords[d] || d).join(' ');
+    return '';
   });
 }
 
-// Helper: Sanitize all outgoing bot messages when conversation is under 2 minutes
-// Rule: Prohibit photos, prohibit all digits (convert to Persian words), prohibit all English letters, prohibit @ and support handles
-function sanitizeMessageForUnderTwoMinutes(rawText: string): string {
+// Helper: Sanitize any message or caption sent to Telegram anonymous chat
+// Rule: Prohibit phone numbers, prohibit raw digits (convert to Persian words), prohibit @ handles, URLs, and external links
+function sanitizeAnonymousChatMessage(rawText: string): string {
   if (!rawText) return '';
   let sanitized = rawText;
 
-  // 1. Remove telegram handles (@username, @FastVpnSupport, @nova_vpn10, etc.)
+  // 1. Remove phone numbers and long digit sequences (e.g., 0912..., +98..., 09..., etc.)
+  sanitized = sanitized.replace(/(?:\+?98|0098|0)?9\d{9}/g, '');
+  sanitized = sanitized.replace(/(?:\+?۹۸|۰۰۹۸|۰)?۹[۰-۹]{9}/g, '');
+  sanitized = sanitized.replace(/\b\d{7,}\b/g, '');
+  sanitized = sanitized.replace(/[۰-۹]{7,}/g, '');
+
+  // 2. Remove telegram handles (@username, @FastVpnSupport, @nova_vpn10, etc.)
   sanitized = sanitized.replace(/@([a-zA-Z0-9_]+)/g, '');
 
-  // 2. Remove URLs, links (t.me/..., http://...)
+  // 3. Remove URLs, links (t.me/..., http://...)
   sanitized = sanitized.replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|telegram\.me\/[^\s]+)/gi, '');
 
-  // 3. Replace common English terms with Persian words before stripping letters
+  // 4. Clean contact boilerplate labels if they have nothing or just "inside photo"
+  sanitized = sanitized.replace(/💬\s*(ارتباط|خرید|پشتیبانی|کانال|ثبت سفارش)\s*[:：]?\s*(داخل عکسی که فرستادم هست|داخل عکس|تو عکسه|)/gi, '');
+
+  // 5. Replace common English terms with Persian words before stripping letters
   sanitized = sanitized
     .replace(/nova_vpn10/gi, 'نوا')
     .replace(/vpn/gi, 'فیلترشکن')
@@ -4053,15 +4097,30 @@ function sanitizeMessageForUnderTwoMinutes(rawText: string): string {
     .replace(/asl/gi, 'اصل')
     .replace(/id/gi, 'آیدی');
 
-  // 4. Remove any remaining English characters/letters
-  sanitized = sanitized.replace(/[a-zA-Z_]+/g, ' ');
-
-  // 5. Convert all digits (0-9 and ۰-۹) to Persian written words
+  // 6. Convert all digits (0-9 and ۰-۹) to Persian written words (e.g. 100 -> صد, 500 -> پانصد, 1 -> یک)
   sanitized = convertDigitsToPersianWords(sanitized);
 
-  // 6. Clean up labels and redundant punctuation
+  // 7. Ensure no leftover digits exist at all
+  sanitized = sanitized.replace(/[\d۰-۹]/g, '');
+
+  // 8. Clean up whitespace and empty lines
   sanitized = sanitized
-    .replace(/💬\s*(ارتباط|خرید|پشتیبانی|کانال)\s*[:：]?\s*/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return sanitized;
+}
+
+// Helper: Sanitize all outgoing bot messages when conversation is under 2 minutes
+function sanitizeMessageForUnderTwoMinutes(rawText: string): string {
+  if (!rawText) return '';
+  let sanitized = sanitizeAnonymousChatMessage(rawText);
+
+  // Remove any remaining English characters/letters
+  sanitized = sanitized.replace(/[a-zA-Z_]+/g, ' ');
+
+  sanitized = sanitized
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -6065,15 +6124,12 @@ async function sendCampaignPromotionBeforeExitIfPending(
   const rawContact = (promo?.contactHandleOrLink || fallbackCampaign?.contactHandle || '').trim();
   const effectiveContactHandle = formatSupportHandle(rawContact);
 
-  let promoText = (promo?.productDescription || fallbackCampaign?.description || '').trim();
+  let promoText = (promo?.productDescription || '').trim();
   if (!promoText && promo?.productName) {
-    promoText = `🌸 پیشنهاد ویژه: ${promo.productName}`;
-  }
-  if (!promoText && fallbackCampaign?.title) {
-    promoText = `🌸 پیشنهاد ویژه: ${fallbackCampaign.title}\n${fallbackCampaign.description || ''}`;
+    promoText = `🌸 مشخصات و قیمت‌های پلن‌های ${promo.productName} داخل عکس هست عزیزم`;
   }
   if (!promoText) {
-    promoText = 'راستی یه پیشنهاد ویژه برات دارم، حتما ببینش 🌸';
+    promoText = 'راستی یه پیشنهاد ویژه برات دارم، عکس رو ببین 🌸';
   }
 
   // UNDER 2 MINUTES RULE: No photos, no numbers, no English letters, no @ handles
@@ -6081,10 +6137,7 @@ async function sendCampaignPromotionBeforeExitIfPending(
     addLog('info', `[چت ناشناس] ⏱️ زمان چت (${Math.round(sessionDurationMs / 1000)} ثانیه) کمتر از ۲ دقیقه است. ارسال عکس، اعداد و آیدی اکیداً ممنوع بوده و متن پاکسازی شد.`);
     promoText = sanitizeMessageForUnderTwoMinutes(promoText);
   } else {
-    // AFTER 2 MINUTES RULE: Append support handle (nova_vpn10 without @)
-    if (effectiveContactHandle && !promoText.includes(effectiveContactHandle)) {
-      promoText += `\n💬 ارتباط و ثبت سفارش: ${effectiveContactHandle}`;
-    }
+    promoText = sanitizeAnonymousChatMessage(promoText);
   }
 
   const effectiveImageUrl = (promo?.imageUrl && promo.imageUrl.trim()) || (fallbackCampaign?.imageUrl && fallbackCampaign.imageUrl.trim()) || '';
@@ -6206,6 +6259,58 @@ async function executeExitAndNextPartner(
 let activeAnonChatSession: AnonymousChatSession | null = null;
 let isAnonEngineRunning = false;
 let anonEngineAbort = false;
+const botEntityCache = new Map<string, any>();
+
+async function resolveBotEntitySmart(client: any, rawUsernameOrLink: string): Promise<any> {
+  const cleanUsername = rawUsernameOrLink
+    .replace('https://t.me/', '')
+    .replace('http://t.me/', '')
+    .replace('t.me/', '')
+    .replace('@', '')
+    .trim()
+    .toLowerCase();
+
+  const cacheKey = `${appState.credentials.phoneNumber || 'default'}_${cleanUsername}`;
+  if (botEntityCache.has(cacheKey)) {
+    const cached = botEntityCache.get(cacheKey);
+    if (cached) return cached;
+  }
+
+  // 1. First attempt: Search in active dialogs (Zero network lookup, bypasses ResolveUsername flood wait entirely!)
+  try {
+    const dialogs = await client.getDialogs({ limit: 150 });
+    for (const d of dialogs || []) {
+      const entity = d.entity;
+      if (!entity) continue;
+      const entityUsername = (entity.username || '').toLowerCase();
+      if (entityUsername && entityUsername === cleanUsername) {
+        botEntityCache.set(cacheKey, entity);
+        return entity;
+      }
+    }
+  } catch (dialogErr: any) {
+    console.warn('[resolveBotEntitySmart] Error scanning dialogs:', dialogErr?.message || dialogErr);
+  }
+
+  // 2. Second attempt: Direct getEntity lookup
+  try {
+    const entity = await client.getEntity(cleanUsername);
+    if (entity) {
+      botEntityCache.set(cacheKey, entity);
+      return entity;
+    }
+  } catch (err: any) {
+    const errMsg = String(err?.errorMessage || err?.message || err);
+    if (errMsg.includes('FLOOD_WAIT') || errMsg.includes('wait of') || errMsg.includes('ResolveUsername')) {
+      throw new Error(
+        `حساب تلگرام شما به دلیل جستجوهای زیاد، از طرف تلگرام موقتاً دچار محدودیت جستجوی نام‌کاربری (FloodWait) شده است.\n\n💡 راه‌حل فوری: لطفاً یک‌بار در اپلیکیشن تلگرام خود ربات @${cleanUsername} را باز کرده و دکمه Start را بزنید تا این ربات به لیست چت‌های حساب شما اضافه شود. پس از آن، سیستم بدون نیاز به جستجو مستقیماً به ربات متصل خواهد شد.`
+      );
+    }
+    throw err;
+  }
+
+  return null;
+}
 
 async function runAnonymousChatWorker() {
   if (isAnonEngineRunning) return;
@@ -6257,15 +6362,17 @@ async function runAnonymousChatWorker() {
     saveData();
 
     try {
-      // 1. Resolve Bot Entity
-      let botUsernameClean = selectedBot.botUsername.replace('@', '').replace('t.me/', '').trim();
+      // 1. Resolve Bot Entity using smart resolver
       let botEntity: any = null;
       try {
-        botEntity = await client.getEntity(botUsernameClean);
+        botEntity = await resolveBotEntitySmart(client, selectedBot.botUsername);
+        if (!botEntity) {
+          throw new Error(`ربات ${selectedBot.botUsername} در تلگرام یافت نشد.`);
+        }
       } catch (e: any) {
         addLog('error', `[چت ناشناس] یافتن ربات ${selectedBot.botUsername} ناموفق بود: ${e.message}`);
         activeAnonChatSession.status = 'failed';
-        activeAnonChatSession.statusMessage = `ربات ${selectedBot.botUsername} یافت نشد.`;
+        activeAnonChatSession.statusMessage = e.message || `ربات ${selectedBot.botUsername} یافت نشد.`;
         break;
       }
 
@@ -6787,20 +6894,15 @@ async function runAnonymousChatWorker() {
               await sendPreExitFarewellIfEnabled(client, botEntity, activeAnonChatSession, instructions);
             }
 
-            let promoText = promo.productDescription || fallbackCampaign?.description || replyResult.text;
-            if (replyResult.text && !promoText.includes(replyResult.text) && replyResult.text.length > 5) {
-              promoText = `${replyResult.text}\n\n${promo.productDescription || fallbackCampaign?.description || ''}`.trim();
+            let promoText = (replyResult.text || promo.productDescription || '').trim();
+            if (!promoText) {
+              promoText = 'پلن‌ها قیمتشون عالیه، عکس رو ببین 🌸';
             }
-
-            const rawContact = promo.contactHandleOrLink || fallbackCampaign?.contactHandle;
-            const effectiveContactHandle = formatSupportHandle(rawContact);
 
             if (isUnder2Min) {
               promoText = sanitizeMessageForUnderTwoMinutes(promoText);
             } else {
-              if (effectiveContactHandle && !promoText.includes(effectiveContactHandle)) {
-                promoText += `\n💬 ارتباط / خرید: ${effectiveContactHandle}`;
-              }
+              promoText = sanitizeAnonymousChatMessage(promoText);
             }
 
             const effectiveImageUrl = (promo.imageUrl && promo.imageUrl.trim()) || fallbackCampaign?.imageUrl;
@@ -6855,18 +6957,15 @@ async function runAnonymousChatWorker() {
             saveData();
           } else if (promo?.enabled && (promo.sendMode === 'ai_natural_mention' || aiReferencedPhoto || strangerInquiredPromo) && (replyResult.shouldSendPromoCard || (replyResult.promoMentioned && (promo.imageUrl || fallbackCampaign?.imageUrl))) && !activeAnonChatSession.promoSent) {
             // AI decided it is the opportune time to pitch and send the product card/banner
-            const fallbackCampaign = (appState.campaigns || []).find(c => c.isActive && c.imageUrl) || (appState.campaigns || []).find(c => c.imageUrl);
-            let promoText = replyResult.text || promo.productDescription || fallbackCampaign?.description || '';
-
-            const rawContact = promo.contactHandleOrLink || fallbackCampaign?.contactHandle;
-            const effectiveContactHandle = formatSupportHandle(rawContact);
+            let promoText = (replyResult.text || promo.productDescription || '').trim();
+            if (!promoText) {
+              promoText = 'پلن‌ها قیمتشون عالیه، عکس رو ببین 🌸';
+            }
 
             if (isUnder2Min) {
               promoText = sanitizeMessageForUnderTwoMinutes(promoText);
             } else {
-              if (effectiveContactHandle && !promoText.includes(effectiveContactHandle)) {
-                promoText += `\n💬 ارتباط / خرید: ${effectiveContactHandle}`;
-              }
+              promoText = sanitizeAnonymousChatMessage(promoText);
             }
 
             const effectiveImageUrl = (promo.imageUrl && promo.imageUrl.trim()) || fallbackCampaign?.imageUrl;
@@ -7662,6 +7761,44 @@ app.post('/api/anonymous/start', async (req, res) => {
   if (botId) {
     appState.anonymousAutomator.selectedBotId = botId;
   }
+
+  const automator = appState.anonymousAutomator;
+  const selectedBot = automator.bots.find((b) => b.id === automator.selectedBotId) || automator.bots[0];
+  if (!selectedBot) {
+    return res.status(400).json({
+      error: 'هیچ ربات چت ناشناسی در لیست وجود ندارد یا انتخاب نشده است.',
+    });
+  }
+
+  // Pre-validate Telegram connection and session health
+  const client = await getOrInitTgClient();
+  if (!client) {
+    appState.credentials.isConnected = false;
+    appState.anonymousAutomator.isActive = false;
+    saveData();
+    addLog('error', '[چت ناشناس] شروع اتوماسیون ناموفق بود: اتصال به حساب تلگرام برقرار نیست یا نشست منقضی شده است.');
+    return res.status(400).json({
+      error: 'اتصال به حساب تلگرام برقرار نیست یا نشست حساب منقضی گردیده است. لطفاً ابتدا وارد حساب تلگرام خود شوید.',
+      needAuth: true,
+    });
+  }
+
+  // Pre-validate bot entity resolution before starting
+  let botEntity: any = null;
+  try {
+    botEntity = await resolveBotEntitySmart(client, selectedBot.botUsername);
+    if (!botEntity) {
+      throw new Error(`ربات ${selectedBot.botUsername} در تلگرام یافت نشد.`);
+    }
+  } catch (entityErr: any) {
+    appState.anonymousAutomator.isActive = false;
+    saveData();
+    addLog('error', `[چت ناشناس] یافتن ربات ${selectedBot.botUsername} ناموفق بود: ${entityErr.message}`);
+    return res.status(400).json({
+      error: entityErr.message,
+    });
+  }
+
   appState.anonymousAutomator.isActive = true;
   appState.anonymousAutomator.currentRunStartedAt = new Date().toISOString();
 
@@ -7721,8 +7858,7 @@ app.post('/api/anonymous/next-stranger', async (req, res) => {
   const selectedBot = automator?.bots.find((b) => b.id === automator.selectedBotId) || automator?.bots[0];
   if (client && selectedBot) {
     try {
-      const botUsernameClean = selectedBot.botUsername.replace('@', '').replace('t.me/', '').trim();
-      const botEntity = await client.getEntity(botUsernameClean);
+      const botEntity = await resolveBotEntitySmart(client, selectedBot.botUsername);
 
       if (activeAnonChatSession) {
         await executeExitAndNextPartner(
@@ -7756,8 +7892,7 @@ app.post('/api/anonymous/send-manual-message', async (req, res) => {
   const selectedBot = automator?.bots.find((b) => b.id === automator.selectedBotId) || automator?.bots[0];
   if (client && selectedBot) {
     try {
-      const botUsernameClean = selectedBot.botUsername.replace('@', '').replace('t.me/', '').trim();
-      const botEntity = await client.getEntity(botUsernameClean);
+      const botEntity = await resolveBotEntitySmart(client, selectedBot.botUsername);
       await client.sendMessage(botEntity, { message: text.trim() });
       if (activeAnonChatSession) {
         activeAnonChatSession.transcript.push({

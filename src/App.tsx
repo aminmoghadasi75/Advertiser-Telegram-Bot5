@@ -437,16 +437,24 @@ export default function App() {
   };
 
   const handleStartAnonymousAutomator = async (botId?: string) => {
-    const res = await fetch('/api/anonymous/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ botId }),
-    });
-    if (!res.ok) {
+    try {
+      const res = await fetch('/api/anonymous/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botId }),
+      });
       const data = await res.json();
-      alert(`خطا در شروع چت ناشناس: ${data.error || 'عملیات ناموفق بود'}`);
+      if (!res.ok) {
+        alert(`خطا در شروع چت ناشناس:\n${data.error || 'عملیات ناموفق بود'}`);
+        if (data.needAuth) {
+          setIsAuthModalOpen(true);
+        }
+      }
+      await fetchState();
+    } catch (err: any) {
+      alert(`خطا در ارتباط با سرور: ${err.message}`);
+      await fetchState();
     }
-    await fetchState();
   };
 
   const handleStopAnonymousAutomator = async () => {

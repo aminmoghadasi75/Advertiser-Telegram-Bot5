@@ -32,6 +32,7 @@ import {
   FileText,
   FileCode,
   TrendingUp,
+  Loader2,
 } from 'lucide-react';
 
 interface AnonymousBotsCardProps {
@@ -82,6 +83,29 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
   const [activeTab, setActiveTab] = useState<'bots' | 'instructions' | 'simulator' | 'live_chat' | 'analytics'>('bots');
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  const handleStartClick = async () => {
+    if (!isConnected) {
+      onOpenAuthModal?.();
+      return;
+    }
+    setIsActionLoading(true);
+    try {
+      await onStartAutomator(config?.selectedBotId);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleStopClick = async () => {
+    setIsActionLoading(true);
+    try {
+      await onStopAutomator();
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   const handleQuickDownload = async (format: 'txt' | 'json') => {
     setIsDownloading(true);
@@ -196,25 +220,42 @@ export const AnonymousBotsCard: React.FC<AnonymousBotsCardProps> = ({
           {config?.isActive ? (
             <button
               id="stop-anon-automator-btn"
-              onClick={onStopAutomator}
-              className="px-5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold flex items-center gap-2 shadow-lg shadow-red-950/40 transition-all"
+              onClick={handleStopClick}
+              disabled={isActionLoading}
+              className="px-5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold flex items-center gap-2 shadow-lg shadow-red-950/40 transition-all cursor-pointer disabled:opacity-60"
             >
-              <Square className="w-4 h-4 text-red-400 fill-current" />
-              <span>توقف اتوماسیون چت</span>
+              {isActionLoading ? (
+                <Loader2 className="w-4 h-4 text-red-400 animate-spin" />
+              ) : (
+                <Square className="w-4 h-4 text-red-400 fill-current" />
+              )}
+              <span>{isActionLoading ? 'در حال توقف...' : 'توقف اتوماسیون چت'}</span>
             </button>
           ) : (
             <button
               id="start-anon-automator-btn"
-              onClick={() => onStartAutomator(config?.selectedBotId)}
-              disabled={!isConnected}
-              className={`px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all ${
+              onClick={handleStartClick}
+              disabled={isActionLoading}
+              className={`px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-60 ${
                 isConnected
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/50 ring-1 ring-emerald-400/40'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40'
               }`}
             >
-              <Play className="w-4 h-4 fill-current" />
-              <span>شروع چت با ناشناس‌ها</span>
+              {isActionLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isConnected ? (
+                <Play className="w-4 h-4 fill-current" />
+              ) : (
+                <Phone className="w-4 h-4 text-amber-400" />
+              )}
+              <span>
+                {isActionLoading
+                  ? 'در حال راه‌اندازی و اتصال...'
+                  : isConnected
+                  ? 'شروع چت با ناشناس‌ها'
+                  : 'ورود به تلگرام جهت شروع چت'}
+              </span>
             </button>
           )}
         </div>
